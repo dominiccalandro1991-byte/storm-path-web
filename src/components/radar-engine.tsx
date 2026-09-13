@@ -78,7 +78,7 @@ export function RadarEngine({ variant = "card" }: { variant?: "card" | "full" })
         container: host.current,
         style: buildStyle("default"),
         center: [pt.lon, pt.lat],
-        zoom: full ? 6.4 : 5.8,
+        zoom: full ? 6.8 : 7.4,
         attributionControl: { compact: true },
         interactive: full,
         canvasContextAttributes: { preserveDrawingBuffer: true, antialias: true },
@@ -104,10 +104,10 @@ export function RadarEngine({ variant = "card" }: { variant?: "card" | "full" })
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !full) return;
+    if (!map) return;
     const pt = gps ?? center;
     map.easeTo({ center: [pt.lon, pt.lat], duration: 400 });
-  }, [gps?.lat, gps?.lon, center.lat, center.lon, full]);
+  }, [gps?.lat, gps?.lon, center.lat, center.lon]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -135,7 +135,9 @@ export function RadarEngine({ variant = "card" }: { variant?: "card" | "full" })
         <div className="relative h-64 md:h-80 pointer-events-none">
           <div ref={host} className="absolute inset-0 bg-[#e6eef2]" />
           <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-bg via-bg/85 to-transparent px-3 pb-3 pt-10">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-primary font-medium">Tap for full radar</p>
+            <p className="text-[11px] uppercase tracking-[0.22em] text-primary font-medium">
+              {radarLive ? "NEXRAD LIVE · tap to expand" : "RADAR · tap to expand"}
+            </p>
             <div className="flex items-center gap-2 mt-1">
               {legend}
               <span className="ml-auto font-mono text-micro text-primary tabular">

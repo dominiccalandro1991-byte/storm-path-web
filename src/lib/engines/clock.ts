@@ -117,6 +117,7 @@ export function pairSeven(
     detail: string;
     wind: string;
     night: boolean;
+    icon?: string | null;
   }[],
 ): {
   name: string;
@@ -126,6 +127,7 @@ export function pairSeven(
   detail: string;
   wind: string;
   night: string;
+  icon: string | null;
 }[] {
   const out: {
     name: string;
@@ -135,6 +137,7 @@ export function pairSeven(
     detail: string;
     wind: string;
     night: string;
+    icon: string | null;
   }[] = [];
   for (let i = 0; i < periods.length && out.length < 7; i++) {
     const p = periods[i];
@@ -155,6 +158,7 @@ export function pairSeven(
       detail: p.detail,
       wind: p.wind,
       night: "",
+      icon: p.icon ?? null,
     });
   }
   return out;

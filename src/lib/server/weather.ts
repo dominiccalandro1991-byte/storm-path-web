@@ -83,13 +83,15 @@ function parseMeteo(raw: Record<string, unknown>): {
   }));
   const now: MeteoNow = {
     temp_c: finite(cur.temperature_2m),
-    feels_c: finite(cur.apparent_temperature, finite(cur.temperature_2m)),
+    feels_c: Number.isFinite(Number(cur.apparent_temperature))
+      ? Number(cur.apparent_temperature)
+      : finite(cur.temperature_2m),
     humidity: finite(cur.relative_humidity_2m),
     precip_mm: finite(cur.precipitation),
     wind_ms: finite(cur.wind_speed_10m) / 3.6,
     wind_deg: finite(cur.wind_direction_10m),
-    pressure_hpa: finite(cur.pressure_msl, 1013),
-    vis_m: finite(cur.visibility, 10000),
+    pressure_hpa: cur.pressure_msl != null ? finite(cur.pressure_msl) : 0,
+    vis_m: cur.visibility != null ? finite(cur.visibility) : 0,
     uv: finite(cur.uv_index),
     code: finite(cur.weather_code),
     aqi: null,
@@ -150,6 +152,8 @@ async function nwsAtmosphere(lat: number, lon: number): Promise<{
         temperature: `${per.temperature}°${per.temperatureUnit ?? "F"}`,
         wind: `${per.windDirection ?? ""} ${per.windSpeed ?? ""}`.trim(),
         humidity: rh.value != null ? `${rh.value}%` : "N/A",
+        icon: per.icon ? String(per.icon) : null,
+        forecast: String(per.shortForecast ?? ""),
       };
     }
     for (const per of periods.slice(0, 48)) {
@@ -161,6 +165,7 @@ async function nwsAtmosphere(lat: number, lon: number): Promise<{
         wind: String(per.windSpeed ?? ""),
         forecast: String(per.shortForecast ?? ""),
         pop: pop.value != null ? Number(pop.value) : null,
+        icon: per.icon ? String(per.icon) : null,
       });
     }
 
@@ -174,6 +179,7 @@ async function nwsAtmosphere(lat: number, lon: number): Promise<{
         detail: String(row.detailedForecast ?? ""),
         wind: String(row.windSpeed ?? ""),
         night: /night/i.test(String(row.name ?? "")),
+        icon: row.icon ? String(row.icon) : null,
       })),
     );
 

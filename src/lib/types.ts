@@ -91,6 +91,7 @@ export type NwsHour = {
   wind: string;
   forecast: string;
   pop: number | null;
+  icon: string | null;
 };
 
 export type NwsDay = {
@@ -101,12 +102,15 @@ export type NwsDay = {
   detail: string;
   wind: string;
   night: string;
+  icon: string | null;
 };
 
 export type NwsNow = {
   temperature: string;
   wind: string;
   humidity: string;
+  icon: string | null;
+  forecast: string;
 };
 
 export type RadarKind = "rainviewer" | "ncep-wms" | "none";
