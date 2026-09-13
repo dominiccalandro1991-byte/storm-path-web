@@ -1,0 +1,89 @@
+@import "tailwindcss";
+@import "maplibre-gl/dist/maplibre-gl.css";
+
+@theme {
+  --color-bg: #071018;
+  --color-surface: #121c28;
+  --color-raised: #182433;
+  --color-fg: #e8f4f8;
+  --color-muted: #7f97a8;
+  --color-primary: #3dd6ff;
+  --color-primary-fg: #041018;
+  --color-border: #243546;
+  --color-danger: #ff4d4d;
+  --color-warn: #ffb020;
+  --color-ok: #3dd6ff;
+  --color-rain: #4f8cff;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  html,
+  body,
+  #app {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    min-height: 100%;
+  }
+  body {
+    font-family: var(--font-sans);
+    line-height: 1.5;
+  }
+  h1, h2, h3 {
+    text-wrap: balance;
+    letter-spacing: -0.02em;
+  }
+  p { text-wrap: pretty; }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) { cursor: pointer; }
+  * { border-color: var(--color-border); }
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+  input, textarea, select {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.tabular { font-variant-numeric: tabular-nums; }
+
+.maplibregl-ctrl-attrib {
+  background: color-mix(in oklab, var(--color-bg) 80%, transparent) !important;
+  color: var(--color-muted) !important;
+  font-size: 10px !important;
+}
+.maplibregl-ctrl-attrib a { color: var(--color-primary) !important; }
+.maplibregl-ctrl-bottom-left,
+.maplibregl-ctrl-bottom-right { margin-bottom: 4.5rem; }
+@media (min-width: 768px) {
+  .maplibregl-ctrl-bottom-left,
+  .maplibregl-ctrl-bottom-right { margin-bottom: 0.5rem; }
+}
+
+@keyframes dash-draw {
+  to { stroke-dashoffset: 0; }
+}
+.mark-stroke {
+  stroke-dasharray: 80;
+  stroke-dashoffset: 80;
+  animation: dash-draw 1.2s ease forwards;
+}

@@ -1,0 +1,133 @@
+import type { GaleReport } from "./engines/gale";
+import type { UnitPrefs } from "./engines/units";
+
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | Json[]
+  | { [key: string]: Json };
+
+export type MapStyle = "dark" | "default" | "satellite" | "terrain";
+
+export type OverlayId = "radar" | "temp" | "wind" | "aqi" | "sat" | "ir";
+
+export type PlaceKind = "home" | "work" | "saved" | "recent";
+
+export type Place = {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  kind: PlaceKind;
+  created_at: string;
+};
+
+export type SavedRoute = {
+  id: string;
+  name: string;
+  origin: string;
+  dest: string;
+  origin_lat: number;
+  origin_lon: number;
+  dest_lat: number;
+  dest_lon: number;
+  distance_m: number;
+  duration_s: number;
+  gale_score: number;
+  created_at: string;
+};
+
+export type AlertItem = {
+  id: string;
+  event: string;
+  severity: string;
+  headline: string;
+  instruction: string;
+  ends: string | null;
+};
+
+export type HourlyPt = {
+  t: string;
+  temp_c: number;
+  precip_mm: number;
+  precip_prob: number;
+  wind_ms: number;
+  code: number;
+  cloud: number;
+};
+
+export type MeteoNow = {
+  temp_c: number;
+  feels_c: number;
+  humidity: number;
+  precip_mm: number;
+  wind_ms: number;
+  wind_deg: number;
+  pressure_hpa: number;
+  vis_m: number;
+  uv: number;
+  code: number;
+  aqi: number | null;
+  pm25: number | null;
+};
+
+export type WeatherBundle = {
+  now: MeteoNow;
+  hourly: HourlyPt[];
+  daily: {
+    t: string;
+    tmax_c: number;
+    tmin_c: number;
+    precip_mm: number;
+    precip_prob: number;
+    wind_ms: number;
+    code: number;
+  }[];
+  alerts: AlertItem[];
+  radar: { host: string; frames: { time: number; path: string }[]; satellite: { time: number; path: string }[] };
+  fetched_at: number;
+};
+
+export type RouteStep = {
+  instruction: string;
+  name: string;
+  distance_m: number;
+  duration_s: number;
+  modifier: string | null;
+  location: [number, number];
+};
+
+export type RoutePlan = {
+  distance_m: number;
+  duration_s: number;
+  geometry: [number, number][];
+  steps: RouteStep[];
+  gale: GaleReport;
+};
+
+export type SearchHit = {
+  name: string;
+  lat: number;
+  lon: number;
+  kind: string;
+};
+
+export type Prefs = UnitPrefs & {
+  northUp: boolean;
+  buildings3d: boolean;
+  scaleBar: boolean;
+  voice: boolean;
+  haptics: boolean;
+  incognito: boolean;
+  analytics: boolean;
+  scenic: boolean;
+  avoidTolls: boolean;
+  avoidHighways: boolean;
+  alertSevere: boolean;
+  alertRain: boolean;
+  theme: "system" | "dark" | "light";
+  onboarded: boolean;
+  tutorialDone: boolean;
+};
