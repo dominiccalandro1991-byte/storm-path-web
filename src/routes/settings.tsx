@@ -115,7 +115,7 @@ function Page() {
         <section className="rounded-lg bg-card border border-border p-4 space-y-2">
           <Row
             title="Map tiles"
-            copy="OpenStreetMap streets with names. Night, satellite, and terrain from the map layers control."
+            copy="Street map with names at every zoom. Night, satellite, and terrain from the map layers control."
             action={<span className="text-xs tracking-wide text-muted">OSM</span>}
           />
           <Row

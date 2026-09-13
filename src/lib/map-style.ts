@@ -1,64 +1,76 @@
 import type { MapStyle } from "./types";
 
-/** OpenFreeMap vector — optional HD streets. Raster is the default so the map never sits black. */
-export const LIBERTY = "https://tiles.openfreemap.org/styles/liberty";
-export const DARK_VECTOR = "https://tiles.openfreemap.org/styles/dark";
+/** No Carto — public Voyager tiles watermark "API KEY REQUIRED" / "Zoom Level Not Supported". */
+const ESRI_STREETS =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}";
+const ESRI_DARK =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}";
+const ESRI_DARK_REF =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}";
+const ESRI_SAT =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+const OSM_HOT = "https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png";
+const TOPO = "https://tile.opentopomap.org/{z}/{x}/{y}.png";
 
-const CARTO_VOYAGER = "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png";
-const CARTO_DARK = "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png";
-const OSM_FR = "https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png";
-
-function raster(tiles: string[], attrib: string, bg: string) {
+function raster(tiles: string[], attrib: string, bg: string, extra?: { tiles: string[]; id: string }) {
+  const sources: Record<string, { type: "raster"; tiles: string[]; tileSize: number; maxzoom: number; attribution: string }> =
+    {
+      base: {
+        type: "raster",
+        tiles,
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: attrib,
+      },
+    };
+  const layers: object[] = [
+    { id: "bg", type: "background", paint: { "background-color": bg } },
+    { id: "base", type: "raster", source: "base", paint: { "raster-opacity": 1 } },
+  ];
+  if (extra) {
+    sources[extra.id] = {
+      type: "raster",
+      tiles: extra.tiles,
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: attrib,
+    };
+    layers.push({
+      id: extra.id,
+      type: "raster",
+      source: extra.id,
+      paint: { "raster-opacity": 1 },
+    });
+  }
   return {
     version: 8 as const,
     glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-    sources: {
-      base: {
-        type: "raster" as const,
-        tiles,
-        tileSize: 256,
-        maxzoom: 20,
-        attribution: attrib,
-      },
-    },
-    layers: [
-      { id: "bg", type: "background" as const, paint: { "background-color": bg } },
-      { id: "base", type: "raster" as const, source: "base", paint: { "raster-opacity": 1 } },
-    ],
+    sources,
+    layers,
+  } as {
+    version: 8;
+    glyphs: string;
+    sources: typeof sources;
+    layers: typeof layers;
   };
 }
 
 const RASTER: Record<MapStyle, ReturnType<typeof raster>> = {
-  default: raster(
-    [CARTO_VOYAGER, OSM_FR],
-    "© OpenStreetMap © CARTO",
-    "#dce6ea",
-  ),
-  dark: raster([CARTO_DARK], "© OpenStreetMap © CARTO", "#0b1218"),
-  satellite: raster(
-    ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-    "Tiles © Esri",
-    "#0b1218",
-  ),
-  terrain: raster(["https://tile.opentopomap.org/{z}/{x}/{y}.png"], "© OSM © OpenTopoMap", "#cfd8c8"),
+  default: raster([ESRI_STREETS], "Tiles © Esri © OSM", "#e6eef2"),
+  dark: raster([ESRI_DARK], "Tiles © Esri", "#0b1218", { id: "labels", tiles: [ESRI_DARK_REF] }),
+  satellite: raster([ESRI_SAT], "Tiles © Esri", "#0b1218"),
+  terrain: raster([TOPO, OSM_HOT], "© OSM © OpenTopoMap", "#cfd8c8"),
 };
 
 export function rasterStyle(kind: MapStyle) {
   return RASTER[kind] ?? RASTER.default;
 }
 
-/** Labeled street map by default (Carto Voyager + OSM/Esri fallbacks). */
 export function buildStyle(kind: MapStyle) {
-  return rasterStyle(kind);
+  return rasterStyle(kind) as never;
 }
 
-export function vectorStyleUrl(kind: MapStyle): string | null {
-  if (kind === "default") return LIBERTY;
-  if (kind === "dark") return DARK_VECTOR;
-  return null;
-}
-
-/** NEXRAD Level III palette (RainViewer color 6) — same family as TV weather radar. */
+/** NEXRAD Level III palette (RainViewer color 6). */
 export function radarTileUrl(host: string, path: string): string {
   const h = host.replace(/\/$/, "");
   const p = path.startsWith("/") ? path : `/${path}`;

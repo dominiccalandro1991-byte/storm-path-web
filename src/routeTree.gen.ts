@@ -14,6 +14,7 @@ import { Route as DriverRouteImport } from './routes/driver'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as NavigateRouteImport } from './routes/navigate'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as RadarRouteImport } from './routes/radar'
 import { Route as SavedRouteImport } from './routes/saved'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as WeatherRouteImport } from './routes/weather'
@@ -44,6 +45,11 @@ const PrivacyRoute = PrivacyRouteImport.update({
   path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RadarRoute = RadarRouteImport.update({
+  id: '/radar',
+  path: '/radar',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SavedRoute = SavedRouteImport.update({
   id: '/saved',
   path: '/saved',
@@ -71,6 +77,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/navigate': typeof NavigateRoute
   '/privacy': typeof PrivacyRoute
+  '/radar': typeof RadarRoute
   '/saved': typeof SavedRoute
   '/settings': typeof SettingsRoute
   '/weather': typeof WeatherRoute
@@ -82,6 +89,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/navigate': typeof NavigateRoute
   '/privacy': typeof PrivacyRoute
+  '/radar': typeof RadarRoute
   '/saved': typeof SavedRoute
   '/settings': typeof SettingsRoute
   '/weather': typeof WeatherRoute
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/navigate': typeof NavigateRoute
   '/privacy': typeof PrivacyRoute
+  '/radar': typeof RadarRoute
   '/saved': typeof SavedRoute
   '/settings': typeof SettingsRoute
   '/weather': typeof WeatherRoute
@@ -107,6 +116,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/navigate'
     | '/privacy'
+    | '/radar'
     | '/saved'
     | '/settings'
     | '/weather'
@@ -118,6 +128,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/navigate'
     | '/privacy'
+    | '/radar'
     | '/saved'
     | '/settings'
     | '/weather'
@@ -129,6 +140,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/navigate'
     | '/privacy'
+    | '/radar'
     | '/saved'
     | '/settings'
     | '/weather'
@@ -141,6 +153,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   NavigateRoute: typeof NavigateRoute
   PrivacyRoute: typeof PrivacyRoute
+  RadarRoute: typeof RadarRoute
   SavedRoute: typeof SavedRoute
   SettingsRoute: typeof SettingsRoute
   WeatherRoute: typeof WeatherRoute
@@ -184,6 +197,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/radar': {
+      id: '/radar'
+      path: '/radar'
+      fullPath: '/radar'
+      preLoaderRoute: typeof RadarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/saved': {
       id: '/saved'
       path: '/saved'
@@ -221,6 +241,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   NavigateRoute: NavigateRoute,
   PrivacyRoute: PrivacyRoute,
+  RadarRoute: RadarRoute,
   SavedRoute: SavedRoute,
   SettingsRoute: SettingsRoute,
   WeatherRoute: WeatherRoute,

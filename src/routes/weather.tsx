@@ -32,7 +32,7 @@ function Page() {
 
         <p className="kicker">Web radar</p>
         <ClientOnly>
-          <RadarEngine />
+          <RadarEngine variant="card" />
         </ClientOnly>
 
         <StormClock />
@@ -111,9 +111,9 @@ function Page() {
         <p className="kicker">NWS alerts</p>
         {!alerts?.length ? (
           <p className="text-sm text-muted">
-            {!gps
-              ? "VIEW · MURPHYSBORO — AWAITING GPS FOR LIVE AND-GATE"
-              : "No active NWS alerts at the live fix"}
+            {alerts === undefined
+              ? "NWS connecting"
+              : "No active NWS alerts at this location"}
           </p>
         ) : (
           <div className="space-y-2">

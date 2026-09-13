@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useStorm } from "@/lib/store";
-import { buildStyle, ncepWmsUrl, radarTileUrl, rasterStyle, satelliteTileUrl } from "@/lib/map-style";
+import { buildStyle, ncepWmsUrl, radarTileUrl, satelliteTileUrl } from "@/lib/map-style";
 import { findVehicle, INTEL_TYPES } from "@/lib/catalog";
 
 type MapLibre = typeof import("maplibre-gl");
@@ -38,7 +38,6 @@ export function MapCanvas() {
   const destRef = useRef<Marker | null>(null);
   const intelRef = useRef<Marker[]>([]);
   const styleOnce = useRef<string | null>(null);
-  const fellBack = useRef(false);
   const [ready, setReady] = useState(false);
   const style = useStorm((s) => s.style);
   const overlays = useStorm((s) => s.overlays);
@@ -88,13 +87,6 @@ export function MapCanvas() {
         if (!dead) setReady(true);
       };
       map.once("load", markReady);
-      map.on("error", () => {
-        if (fellBack.current) return;
-        if (initialStyle === "default" || initialStyle === "dark") {
-          fellBack.current = true;
-          map.setStyle(rasterStyle(initialStyle));
-        }
-      });
       ro = new ResizeObserver(() => map.resize());
       ro.observe(host.current);
       mapRef.current = map;
@@ -119,7 +111,6 @@ export function MapCanvas() {
     if (!map) return;
     if (styleOnce.current === style) return;
     styleOnce.current = style;
-    fellBack.current = false;
     setReady(false);
     const onLoad = () => {
       map.resize();
