@@ -1,4 +1,4 @@
-import { Compass, Layers, Minus, Plus } from "lucide-react";
+import { Compass, Layers, Minus, Plus, X } from "lucide-react";
 import { useStorm } from "@/lib/store";
 import { msToSpeed, speedSuffix } from "@/lib/engines/units";
 import { driveWindowCopy } from "@/lib/engines/clock";
@@ -54,11 +54,12 @@ export function MapHud() {
   const alert0 = alerts?.[0];
   const showClock = clock.slots.length > 0 || clock.risk === "IMPACT";
   const showPath = !!(stormPath || cone.risk === "INTERSECT");
+  const topPad = alert0 ? "top-14" : "top-2";
 
   return (
     <>
       {alert0 && (
-        <div className="absolute top-2 left-2 right-2 z-30 bg-danger/90 text-fg px-3 py-2 text-hud">
+        <div className="absolute top-2 left-2 right-14 z-30 bg-danger/90 text-fg px-3 py-1.5 text-hud truncate">
           <b className="mr-2 tracking-widest">NWS {alert0.severity}</b>
           {alert0.event}
         </div>
@@ -66,8 +67,8 @@ export function MapHud() {
 
       <div
         className={cn(
-          "absolute left-2 z-20 max-w-64 pointer-events-none font-mono text-micro tracking-wider bg-surface/90 border border-border px-2 py-1 text-primary",
-          alert0 ? "top-14" : "top-2",
+          "absolute left-2 z-20 max-w-[11.5rem] pointer-events-none font-mono text-micro tracking-wider bg-surface/90 border border-border px-2 py-1 text-primary",
+          topPad,
         )}
       >
         {radarAt
@@ -78,7 +79,7 @@ export function MapHud() {
               ? "RADAR LIVE"
               : "RADAR CONNECTING"}
         <span
-          className="mt-1 block h-1.5 w-40 rounded-full"
+          className="mt-1 block h-1.5 w-36 rounded-full"
           style={{
             background:
               "linear-gradient(90deg,#9be38a,#3cb43c,#f8f060,#f0a020,#e03820,#c01880,#f0f0f0)",
@@ -97,12 +98,7 @@ export function MapHud() {
         </div>
       )}
 
-      <div
-        className={cn(
-          "absolute right-2.5 z-20 flex flex-col gap-1.5",
-          alert0 ? "top-14" : "top-2",
-        )}
-      >
+      <div className={cn("absolute right-2.5 z-30 flex flex-col gap-1.5", topPad)}>
         <button
           type="button"
           className="size-9 border border-primary bg-surface/95 text-primary grid place-items-center"
@@ -138,14 +134,43 @@ export function MapHud() {
         </button>
         <button
           type="button"
-          className="size-9 border border-border bg-surface/95 grid place-items-center"
+          className={cn(
+            "size-9 border bg-surface/95 grid place-items-center",
+            open ? "border-primary text-primary" : "border-border",
+          )}
           aria-label="Layers"
+          aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
         >
           <Layers className="size-4" strokeWidth={1.75} />
         </button>
-        {open && (
-          <div className="w-40 bg-surface border border-border p-2 space-y-1 text-xs">
+      </div>
+
+      {open && (
+        <>
+          <button
+            type="button"
+            className="absolute inset-0 z-40 bg-transparent"
+            aria-label="Close layers"
+            onClick={() => setOpen(false)}
+          />
+          <div
+            className={cn(
+              "absolute right-14 z-50 w-44 max-h-[42vh] overflow-auto bg-surface/98 border border-primary p-2 space-y-0.5 text-xs shadow-lg",
+              topPad,
+            )}
+          >
+            <div className="flex items-center justify-between px-1 pb-1">
+              <p className="text-micro tracking-widest text-primary">MAP LAYERS</p>
+              <button
+                type="button"
+                className="size-7 grid place-items-center text-muted"
+                aria-label="Close"
+                onClick={() => setOpen(false)}
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
             {STYLES.map((s) => (
               <button
                 key={s.id}
@@ -159,6 +184,7 @@ export function MapHud() {
                 {s.label}
               </button>
             ))}
+            <div className="h-px bg-border my-1" />
             {OVL.map((o) => (
               <label key={o.id} className="flex items-center gap-2 min-h-8 px-2">
                 <input
@@ -171,19 +197,19 @@ export function MapHud() {
               </label>
             ))}
           </div>
-        )}
-      </div>
+        </>
+      )}
 
       {showPath && (
-        <div className="absolute left-2 right-2 bottom-hud-stack z-20 bg-raised/95 border border-primary px-3 py-2 text-hud">
+        <div className="absolute left-2 right-hud-side bottom-hud-under z-20 bg-raised/95 border border-primary px-3 py-1.5 text-hud line-clamp-2">
           {stormPath ? (
             <>
-              <b className="block tracking-widest text-primary text-micro">STORM PATH</b>
-              Verified detour · +{stormPath.extraMin} min · avoids {stormPath.event}
+              <b className="tracking-widest text-primary text-micro">STORM PATH · </b>
+              +{stormPath.extraMin} min · avoids {stormPath.event}
             </>
           ) : (
             <>
-              <b className="block tracking-widest text-danger text-micro">INTERSECT CONE</b>
+              <b className="tracking-widest text-danger text-micro">INTERSECT · </b>
               {cone.copy}
             </>
           )}
@@ -193,16 +219,16 @@ export function MapHud() {
       {showClock && (
         <div
           className={cn(
-            "absolute left-2 right-hud-side z-20 bg-surface/95 border px-3 py-1.5 font-mono text-micro tracking-wide pointer-events-none",
+            "absolute left-2 right-hud-side z-20 bg-surface/95 border px-3 py-1.5 font-mono text-micro tracking-wide pointer-events-none line-clamp-2",
             clock.risk === "IMPACT" ? "border-danger text-danger" : "border-warn text-warn",
-            showPath ? "bottom-hud-under" : "bottom-hud-stack",
+            showPath ? "bottom-[13.75rem]" : "bottom-hud-stack",
           )}
         >
           {clock.risk} · {win}
         </div>
       )}
 
-      <div className="absolute left-2 right-hud-side bottom-hud-dock z-20 bg-surface/95 border border-warn border-l-4 px-3 py-2 pointer-events-none">
+      <div className="absolute left-2 right-hud-side bottom-hud-dock z-20 bg-surface/95 border border-warn border-l-4 px-3 py-1.5 pointer-events-none">
         <p className="font-mono text-warn font-medium">
           {step
             ? `${(step.distance_m / 1609.34).toFixed(1)} mi`
@@ -214,8 +240,8 @@ export function MapHud() {
                   ? "MAP"
                   : "MAP"}
         </p>
-        <p className="text-sm">{step?.instruction ?? (dest ? "Head toward destination" : "Set a destination")}</p>
-        <p className="text-hud text-muted">{dest?.name ?? "SEARCH TO NAVIGATE"}</p>
+        <p className="text-sm truncate">{step?.instruction ?? (dest ? "Head toward destination" : "Set a destination")}</p>
+        <p className="text-hud text-muted truncate">{dest?.name ?? "SEARCH TO NAVIGATE"}</p>
       </div>
 
       <div className="absolute right-2.5 bottom-hud-dock z-20 size-speedo rounded-full border-2 border-primary bg-surface/95 grid place-items-center pointer-events-none">
@@ -225,19 +251,25 @@ export function MapHud() {
         </div>
       </div>
 
-      <div className="absolute left-2.5 right-2.5 bottom-2.5 z-20 flex gap-2">
+      <div className="absolute left-2.5 right-2.5 bottom-2.5 z-50 flex gap-2">
         <button
           type="button"
           className="flex-1 min-h-12 bg-surface/95 border border-primary px-3 text-left hud-clip-wide"
-          onClick={() => patch({ sheet: "dest" })}
+          onClick={() => {
+            setOpen(false);
+            patch({ sheet: "dest" });
+          }}
         >
           <small className="block text-micro tracking-widest text-primary font-medium">SET DESTINATION</small>
-          <span className="text-sm">{dest?.name ?? "Business, town, or address"}</span>
+          <span className="text-sm truncate block">{dest?.name ?? "Business, town, or address"}</span>
         </button>
         <button
           type="button"
           className="w-dock min-h-12 bg-surface/95 border border-primary text-micro tracking-wide text-primary flex flex-col items-center justify-center gap-0.5"
-          onClick={() => patch({ sheet: "veh", vehPack: null })}
+          onClick={() => {
+            setOpen(false);
+            patch({ sheet: "veh", vehPack: null });
+          }}
         >
           <VehicleThumb />
           MARKER
@@ -245,7 +277,10 @@ export function MapHud() {
         <button
           type="button"
           className="w-dock min-h-12 bg-surface/95 border border-warn text-micro tracking-wide text-warn"
-          onClick={() => patch({ sheet: "intel" })}
+          onClick={() => {
+            setOpen(false);
+            patch({ sheet: "intel" });
+          }}
         >
           REPORT
         </button>
