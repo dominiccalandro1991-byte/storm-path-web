@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { StormClock } from "@/components/storm-clock";
@@ -21,10 +21,20 @@ function Page() {
   const remainSec = useStorm((s) => s.remainSec);
   const cone = useStorm((s) => s.cone);
   const srcOk = useStorm((s) => s.srcOk);
+  const reports = useStorm((s) => s.reports);
   const patch = useStorm((s) => s.patch);
+  const setPrefs = useStorm((s) => s.setPrefs);
+  const prefs = useStorm((s) => s.prefs);
+  const placeLabel = useStorm((s) => s.placeLabel);
+  const dotName = useStorm((s) => s.dotName);
+  const gpsDenied = useStorm((s) => s.gpsDenied);
+  const navStep = useStorm((s) => s.navStep);
   const mode = nextState(!!gps, wxLive, radarLive, lastMode);
-  const cells = etaCells(remainSec ?? (plan ? plan.duration_s : 0));
-  const miles = plan ? `${(plan.distance_m / 1609.34).toFixed(1)} mi` : dest ? "route wait" : null;
+  const hasEta = !!(dest && (remainSec != null || plan));
+  const cells = hasEta ? etaCells(remainSec ?? (plan ? plan.duration_s : 0)) : null;
+  const miles = plan ? `${(plan.distance_m / 1609.34).toFixed(1)} mi` : dest ? "routing" : null;
+  const step = plan?.steps.slice(navStep).find((s) => s.distance_m > 30) ?? plan?.steps[navStep];
+  const showGpsBtn = !gps && (prefs.gpsAsked || gpsDenied);
 
   return (
     <AppShell>
@@ -32,21 +42,28 @@ function Page() {
         <p className="text-[11px] uppercase tracking-[0.22em] text-primary">Driver</p>
         <h1 className="text-3xl font-medium">{gateLabel(mode)}</h1>
         <p className="text-sm text-muted">{confidenceCopy(!!gps, wxLive, radarLive)}</p>
+        <p className="font-mono text-xs text-primary">
+          {placeLabel} · {dotName || "DOT"} · {gps ? "GPS LIVE" : gpsDenied ? "GPS OFF" : "MAP"}
+        </p>
 
         <div className="flex flex-wrap gap-1.5">
-          {SOURCE_KEYS.map((n) => (
-            <button
-              key={n}
-              type="button"
-              className={cn(
-                "min-h-8 px-2 border text-[10px] tracking-wide",
-                srcOk[n] ? "border-ok text-ok" : "border-border text-muted",
-              )}
-              onClick={() => patch({ sheet: "src", srcTab: n })}
-            >
-              {n}
-            </button>
-          ))}
+          {SOURCE_KEYS.map((n) => {
+            const nCount = (reports[n] ?? []).length;
+            return (
+              <button
+                key={n}
+                type="button"
+                className={cn(
+                  "min-h-8 px-2 border text-[10px] tracking-wide",
+                  srcOk[n] ? "border-ok text-ok" : "border-border text-muted",
+                )}
+                onClick={() => patch({ sheet: "src", srcTab: n })}
+              >
+                {n === "DOT" ? dotName || n : n}
+                {srcOk[n] ? ` ${nCount || "LIVE"}` : ""}
+              </button>
+            );
+          })}
         </div>
 
         <section className="rounded-lg bg-card border border-border p-4">
@@ -56,15 +73,21 @@ function Page() {
           <h2 className="text-xl font-medium mt-1">{gps ? "You're live" : "You're on the map"}</h2>
           <p className="text-sm text-muted mt-2">
             {gps
-              ? "Live GPS is on. Search a town or address, then Start Drive. Weather and radar stay on the live fix."
-              : "Street map, live NEXRAD, and NWS are already running. Allow location once to snap the HUD to you — or keep driving from the map."}
+              ? `Fix on ${placeLabel}. ${dotName} / NWS / NEXRAD stay on this point. Search a town, then Start Drive.`
+              : "Street map, live NEXRAD, and NWS already run. Allow location once to snap the HUD to you — or keep driving from the map."}
           </p>
         </section>
 
         <Button className="w-full uppercase tracking-widest" onClick={() => patch({ sheet: "dest" })}>
           Start drive
         </Button>
-        {!gps && (
+        <Link
+          to="/"
+          className="inline-flex items-center justify-center min-h-11 w-full border border-border uppercase tracking-widest text-sm"
+        >
+          Open map
+        </Link>
+        {showGpsBtn && (
           <Button variant="ghost" className="w-full uppercase tracking-widest border-warn text-warn" onClick={armGps}>
             Allow location
           </Button>
@@ -75,11 +98,21 @@ function Page() {
           </Button>
         )}
 
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="size-4 accent-primary"
+            checked={prefs.avoidHighways}
+            onChange={(e) => setPrefs({ avoidHighways: e.target.checked })}
+          />
+          Avoid highways
+        </label>
+
         <p className="text-[11px] uppercase tracking-[0.22em] text-primary pt-2">Time to arrive</p>
         <div className="grid grid-cols-4 gap-2">
           {(["DAYS", "HOURS", "MIN", "SEC"] as const).map((lab, i) => (
             <div key={lab} className="rounded-md bg-card border border-border p-3 text-center">
-              <b className="font-mono text-2xl tabular">{cells[i]}</b>
+              <b className="font-mono text-2xl tabular">{cells ? cells[i] : "—"}</b>
               <span className="block text-[10px] tracking-widest text-muted mt-1">{lab}</span>
             </div>
           ))}
@@ -90,6 +123,7 @@ function Page() {
             <>
               <p className="font-medium">↑ {miles}</p>
               <p>{dest.name}</p>
+              {step && <p className="mt-1">{step.instruction}</p>}
               <p className="text-muted mt-1">
                 {gps
                   ? plan

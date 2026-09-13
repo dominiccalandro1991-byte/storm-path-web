@@ -5,7 +5,7 @@ import { pairSeven } from "@/lib/engines/clock";
 import { geomCentroid, geomHits, type GeoGeom } from "@/lib/engines/geom";
 import { SAMPLE_MAX, SAMPLE_SPACING_M } from "@/lib/engines/constants";
 import { VIEW_ORIGIN, type SourceKey } from "@/lib/catalog";
-import { dotFor, pickFeatureText } from "@/lib/dot";
+import { dotFor, parseWzdx, pickFeatureText } from "@/lib/dot";
 import type {
   AlertGeom,
   AlertItem,
@@ -706,7 +706,7 @@ export const fetchSources = createServerFn({ method: "GET" })
         id: "noaa-rv",
         source: "NOAA",
         title: "NEXRAD MOSAIC",
-        body: "RainViewer / NOAA NEXRAD Level III tiles on a live loop.",
+        body: "IEM / NOAA NEXRAD Level III mosaic on the live map.",
         when: new Date(data.radarAt * 1000).toLocaleString(),
       });
     }
@@ -731,7 +731,7 @@ export const fetchSources = createServerFn({ method: "GET" })
     }));
     srcOk.NWS = !!data.wxOk || (data.alerts ?? []).length > 0;
 
-    const [dotRaw, fema, closures, shelters] = await Promise.all([
+    const [dotRaw, fema, closures, shelters, wzdxRaw] = await Promise.all([
       agency.incidents ? getJsonSoft(agency.incidents, 10000) : Promise.resolve(null),
       getJsonSoft(
         `https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries?$filter=state%20eq%20%27${st}%27&$orderby=declarationDate%20desc&$top=8`,
@@ -747,11 +747,13 @@ export const fetchSources = createServerFn({ method: "GET" })
         `https://gis.fema.gov/arcgis/rest/services/NSS/OpenShelters/MapServer/0/query?where=state%3D%27${st}%27&outFields=shelter_id,shelter_name,address,city,state,shelter_status,evacuation_capacity&resultRecordCount=40&f=json`,
         10000,
       ),
+      agency.wzdx ? getJsonSoft(agency.wzdx, 10000) : Promise.resolve(null),
     ]);
 
     const dotFeats = ((dotRaw as Record<string, unknown> | null)?.features ?? []) as {
       attributes?: Record<string, unknown>;
     }[];
+    const wzdxDot = parseWzdx(wzdxRaw, "DOT", st);
     const dotReports: SrcReport[] = dotFeats.map((f, i) => {
       const a = f.attributes ?? {};
       const t = pickFeatureText(a);
@@ -763,17 +765,20 @@ export const fetchSources = createServerFn({ method: "GET" })
         when: t.when || agency.name,
       };
     });
+    if (!dotReports.length && wzdxDot.length) {
+      for (const r of wzdxDot.slice(0, 16)) dotReports.push({ ...r, source: "DOT" });
+    }
     if (!dotReports.length) {
       dotReports.push({
         id: `dot-${st}-agency`,
         source: "DOT",
         title: `${agency.name} · ${st}`,
-        body: `${agency.long} traveler information for this state. Live 511 incidents appear here when the state publishes them.`,
+        body: `${agency.long} traveler information. Live 511 / WZDx incidents appear here when this state publishes a public feed.`,
         when: agency.name,
       });
     }
     reports.DOT = dotReports;
-    srcOk.DOT = true;
+    srcOk.DOT = dotFeats.length > 0 || wzdxDot.length > 0;
 
     const femaRows =
       ((fema as Record<string, unknown> | null)?.DisasterDeclarationsSummaries ?? []) as Record<string, unknown>[];
@@ -798,12 +803,13 @@ export const fetchSources = createServerFn({ method: "GET" })
       })),
       ...warns,
     ];
-    srcOk["EMERG MGMT"] = true;
+    srcOk["EMERG MGMT"] = femaRows.length > 0 || warns.length > 0;
 
     const closeFeats = ((closures as Record<string, unknown> | null)?.features ?? []) as {
       attributes?: Record<string, unknown>;
     }[];
-    reports["ROAD CLOSURES"] =
+    const wzdxClose = parseWzdx(wzdxRaw, "ROAD CLOSURES", st);
+    const closeReports: SrcReport[] =
       closeFeats.length > 0
         ? closeFeats.map((f) => {
             const a = f.attributes ?? {};
@@ -815,16 +821,18 @@ export const fetchSources = createServerFn({ method: "GET" })
               when: a.StartDate ? new Date(Number(a.StartDate)).toLocaleString() : agency.name,
             };
           })
-        : [
-            {
-              id: `close-${st}-live`,
-              source: "ROAD CLOSURES",
-              title: `${agency.name} CLOSURES`,
-              body: `Road closure desk for ${st}. Posted 511 closures show here.`,
-              when: agency.name,
-            },
-          ];
-    srcOk["ROAD CLOSURES"] = true;
+        : wzdxClose;
+    if (!closeReports.length) {
+      closeReports.push({
+        id: `close-${st}-live`,
+        source: "ROAD CLOSURES",
+        title: `${agency.name} CLOSURES`,
+        body: `USDOT WZDx / 511 closures for ${st} show here when the state publishes a public feed.`,
+        when: agency.name,
+      });
+    }
+    reports["ROAD CLOSURES"] = closeReports;
+    srcOk["ROAD CLOSURES"] = closeFeats.length > 0 || wzdxClose.length > 0;
 
     const shFeats = ((shelters as Record<string, unknown> | null)?.features ?? []) as {
       attributes?: Record<string, unknown>;
@@ -839,7 +847,7 @@ export const fetchSources = createServerFn({ method: "GET" })
         when: "FEMA NSS OPEN",
       };
     });
-    srcOk.SHELTERS = Array.isArray((shelters as Record<string, unknown> | null)?.features);
+    srcOk.SHELTERS = shFeats.length > 0;
 
     return { reports, srcOk };
   });
