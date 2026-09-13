@@ -8,10 +8,20 @@ import { Button } from "@/components/ui/button";
 import { fmtCoord } from "@/lib/engines/units";
 import { speak, cancelVoice } from "@/lib/voice";
 import { requestGps } from "@/hooks/use-gps";
-import type { CoordFmt, DistUnit, PressUnit, TempUnit } from "@/lib/engines/units";
+import { findVehicle, INTEL_TYPES, VEH_SECTIONS } from "@/lib/catalog";
+import type { CoordFmt, DistUnit, PressUnit, SpeedUnit, TempUnit } from "@/lib/engines/units";
+import type { MapStyle } from "@/lib/types";
 import { useEffect, useState, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/settings")({ component: Page });
+
+const STYLES: { id: MapStyle; label: string }[] = [
+  { id: "default", label: "STREET" },
+  { id: "dark", label: "NIGHT" },
+  { id: "satellite", label: "SAT" },
+  { id: "terrain", label: "TERRAIN" },
+];
 
 function Page() {
   const user = useCurrentUser();
@@ -27,18 +37,27 @@ function Page() {
   const dotName = useStorm((s) => s.dotName);
   const ping = useStorm((s) => s.ping);
   const patch = useStorm((s) => s.patch);
+  const style = useStorm((s) => s.style);
+  const overlays = useStorm((s) => s.overlays);
+  const toggleOverlay = useStorm((s) => s.toggleOverlay);
+  const vehicleId = useStorm((s) => s.vehicleId);
+  const follow = useStorm((s) => s.follow);
+  const veh = findVehicle(vehicleId);
   const [perm, setPerm] = useState("unknown");
 
   useEffect(() => {
     void navigator.permissions
       ?.query({ name: "geolocation" as PermissionName })
-      .then((p) => setPerm(p.state))
+      .then((p) => {
+        setPerm(p.state);
+        p.onchange = () => setPerm(p.state);
+      })
       .catch(() => setPerm("unknown"));
   }, [gps, gpsDenied]);
 
   function persist() {
     if (user) void savePrefsCloud({ data: { prefs } }).catch(() => undefined);
-    ping("Preferences stored");
+    ping(user ? "PREFS SAVED · CLOUD" : "PREFS STORED ON DEVICE");
   }
 
   return (
@@ -46,6 +65,9 @@ function Page() {
       <div className="p-4 md:p-6 max-w-xl mx-auto space-y-5 pb-8">
         <p className="text-[11px] uppercase tracking-[0.22em] text-primary">Settings</p>
         <h1 className="text-3xl font-medium">Operator</h1>
+        <p className="text-sm text-muted font-mono">
+          {placeLabel} · {dotName || "DOT"}
+        </p>
 
         <section className="rounded-lg bg-card border border-border p-4 space-y-3">
           <Row
@@ -54,7 +76,10 @@ function Page() {
             action={
               <button
                 type="button"
-                className={`min-h-10 px-3 border text-xs tracking-wide ${prefs.gpsEnabled ? "border-ok text-ok" : "border-border text-muted"}`}
+                className={cn(
+                  "min-h-10 px-3 border text-xs tracking-wide",
+                  prefs.gpsEnabled && gps ? "border-ok text-ok" : "border-border text-muted",
+                )}
                 onClick={() => {
                   const next = !prefs.gpsEnabled;
                   setPrefs({ gpsEnabled: next, gpsAsked: true });
@@ -75,29 +100,119 @@ function Page() {
                 : `${locKind.toUpperCase()} · ${placeLabel}`}
             {dotName ? ` · ${dotName}` : ""}
           </p>
+          {gpsDenied && (
+            <p className="text-xs text-warn">
+              Browser blocked location. Site settings → Location → Allow, then tap ON.
+            </p>
+          )}
+        </section>
+
+        <section className="rounded-lg bg-card border border-border p-4 space-y-3">
+          <p className="font-medium">Map</p>
+          <p className="text-xs text-muted">Esri World Street / Imagery / Terrain. No OSM watermark.</p>
+          <div className="flex flex-wrap gap-1.5">
+            {STYLES.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className={cn(
+                  "min-h-9 px-3 border text-[10px] tracking-wide",
+                  style === s.id ? "border-primary text-primary" : "border-border text-muted",
+                )}
+                onClick={() => patch({ style: s.id })}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+          <Toggle
+            label="Live NEXRAD overlay"
+            checked={overlays.includes("radar")}
+            onChange={() => toggleOverlay("radar")}
+          />
+          <Toggle label="Keep map north-up" checked={prefs.northUp} onChange={(v) => setPrefs({ northUp: v })} />
+          <Toggle
+            label="Follow GPS"
+            checked={follow}
+            onChange={(v) => patch({ follow: v })}
+          />
+        </section>
+
+        <section className="rounded-lg bg-card border border-border p-4 space-y-3">
+          <Row
+            title="Vehicle marker"
+            copy="Storm forms stay on your GPS trail."
+            action={
+              <button
+                type="button"
+                className="min-h-10 px-3 border border-primary text-primary text-xs tracking-wide"
+                onClick={() => patch({ sheet: "veh", vehPack: null })}
+              >
+                CHANGE
+              </button>
+            }
+          />
+          {veh && (
+            <div className="flex items-center gap-3">
+              <img src={veh.url} alt="" className="h-16 w-10 object-contain" />
+              <div>
+                <p className="text-sm font-medium">{veh.label}</p>
+                <p className="text-xs text-muted">{veh.desc}</p>
+              </div>
+            </div>
+          )}
+          <div className="grid grid-cols-5 gap-1">
+            {VEH_SECTIONS.flatMap((s) => s.items).map((it) => (
+              <button
+                key={it.id}
+                type="button"
+                className={cn(
+                  "border p-1 bg-card",
+                  vehicleId === it.id ? "border-primary" : "border-border",
+                )}
+                onClick={() => {
+                  patch({ vehicleId: it.id });
+                  ping(`MARKER SET · ${it.label}`);
+                }}
+                aria-label={it.label}
+              >
+                <img src={it.url} alt="" className="h-12 w-full object-contain" />
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-lg bg-card border border-border p-4 space-y-3">
+          <p className="font-medium">Hazard pins</p>
+          <p className="text-xs text-muted">
+            Tap a type on the map Report button. Pins last 3 hours on this device.
+          </p>
+          <div className="grid grid-cols-4 gap-2">
+            {Object.entries(INTEL_TYPES).map(([k, t]) => (
+              <div key={k} className="text-center">
+                <img src={t.photo} alt="" className="h-12 w-full object-cover rounded-sm border border-border" />
+                <p className="text-[9px] tracking-wide text-muted mt-1">{t.label}</p>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section className="rounded-lg bg-card border border-border p-4">
           <p className="font-medium">Feeds</p>
           <p className="text-sm text-muted font-mono mt-1">
-            GPS={String(!!gps)} NWS={String(wxLive)} RADAR={String(radarLive)} {dotName}
+            GPS={gps ? "LIVE" : "OFF"} · NWS={wxLive ? "LIVE" : "WAIT"} · RADAR={radarLive ? "LIVE" : "WAIT"} ·{" "}
+            {dotName || "DOT"}
           </p>
         </section>
 
         <section className="rounded-lg bg-card border border-border p-4 space-y-3">
-          <Row
-            title="Speed units"
-            copy="Live GPS speed from this device"
-            action={
-              <button
-                type="button"
-                className="min-h-10 px-3 border border-border text-xs tracking-wide"
-                onClick={() => setPrefs({ speed: prefs.speed === "mph" ? "kmh" : "mph" })}
-              >
-                {prefs.speed === "mph" ? "MPH" : "KMH"}
-              </button>
-            }
-          />
+          <Field label="Speed">
+            <Sel
+              value={prefs.speed}
+              onChange={(v) => setPrefs({ speed: v as SpeedUnit })}
+              opts={["mph", "kmh", "kt"]}
+            />
+          </Field>
           <Field label="Temperature">
             <Sel value={prefs.temp} onChange={(v) => setPrefs({ temp: v as TempUnit })} opts={["F", "C", "K"]} />
           </Field>
@@ -113,18 +228,23 @@ function Page() {
         </section>
 
         <section className="rounded-lg bg-card border border-border p-4 space-y-2">
-          <Row
-            title="Map tiles"
-            copy="Street map with names at every zoom. Night, satellite, and terrain from the map layers control."
-            action={<span className="text-xs tracking-wide text-muted">OSM</span>}
-          />
+          <p className="font-medium">Routing</p>
+          <Toggle label="Avoid highways" checked={prefs.avoidHighways} onChange={(v) => setPrefs({ avoidHighways: v })} />
+          <Toggle label="Avoid tolls" checked={prefs.avoidTolls} onChange={(v) => setPrefs({ avoidTolls: v })} />
+          <Toggle label="Scenic bias" checked={prefs.scenic} onChange={(v) => setPrefs({ scenic: v })} />
+        </section>
+
+        <section className="rounded-lg bg-card border border-border p-4 space-y-2">
           <Row
             title="Voice nav"
-            copy="Turn-by-turn as you drive. Spoken on this device — nothing is uploaded."
+            copy="Turn-by-turn on this device. Nothing is uploaded."
             action={
               <button
                 type="button"
-                className={`min-h-10 px-3 border text-xs tracking-wide ${prefs.voice ? "border-ok text-ok" : "border-border text-muted"}`}
+                className={cn(
+                  "min-h-10 px-3 border text-xs tracking-wide",
+                  prefs.voice ? "border-ok text-ok" : "border-border text-muted",
+                )}
                 onClick={() => {
                   const next = !prefs.voice;
                   setPrefs({ voice: next });
@@ -156,8 +276,17 @@ function Page() {
               aria-label="Voice volume"
             />
           </div>
-          <Toggle label="Keep map north-up" checked={prefs.northUp} onChange={(v) => setPrefs({ northUp: v })} />
+          <Button
+            variant="quiet"
+            onClick={() => {
+              setPrefs({ voice: true });
+              speak("In two miles, turn right.", true);
+            }}
+          >
+            Test voice
+          </Button>
           <Toggle label="Severe weather alerts" checked={prefs.alertSevere} onChange={(v) => setPrefs({ alertSevere: v })} />
+          <Toggle label="Rain alerts" checked={prefs.alertRain} onChange={(v) => setPrefs({ alertRain: v })} />
           <Toggle label="Incognito navigation" checked={prefs.incognito} onChange={(v) => setPrefs({ incognito: v })} />
           <Button variant="quiet" onClick={persist}>
             Save prefs
@@ -167,9 +296,9 @@ function Page() {
         <section className="rounded-lg bg-card border border-border p-4 space-y-2 text-sm">
           <p className="font-medium">Storm Path Web</p>
           <p className="text-muted">
-            Street map with live NEXRAD radar, isolated 48-hour and 7-day NWS, Storm Clock, OSRM
-            routing, Intersect Cone, and state DOT reports that follow the map (IDOT, MoDOT, TxDOT,
-            and every other state agency). Location is optional and toggled here.
+            Esri streets, live NEXRAD, isolated 48-hour and 7-day NWS, Storm Clock, OSRM routing,
+            Intersect Cone, and state DOT / WZDx that follow the map (IDOT, MoDOT, and every other
+            state agency). Location is optional and toggled here.
           </p>
         </section>
 
