@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Link } from "@tanstack/react-router";
 import { useStorm } from "@/lib/store";
-import { buildStyle, ncepWmsUrl, radarTileUrl } from "@/lib/map-style";
+import { buildStyle, ncepWmsUrl, radarRaster, radarTileUrl } from "@/lib/map-style";
 import { cn } from "@/lib/utils";
 
 type MapInst = import("maplibre-gl").Map;
@@ -26,19 +26,19 @@ function paintRadar(map: MapInst, tiles: string[] | null) {
     if (map.getSource("rv")) map.removeSource("rv");
     return;
   }
-  const existing = map.getSource("rv") as RasterSrc | undefined;
-  if (existing && typeof existing.setTiles === "function") {
+  const existing = map.getSource("rv") as (RasterSrc & { maxzoom?: number }) | undefined;
+  if (existing && typeof existing.setTiles === "function" && existing.maxzoom === 7) {
     existing.setTiles(tiles);
     return;
   }
   if (map.getLayer("rv")) map.removeLayer("rv");
   if (map.getSource("rv")) map.removeSource("rv");
-  map.addSource("rv", { type: "raster", tiles, tileSize: 256 });
+  map.addSource("rv", radarRaster(tiles));
   map.addLayer({
     id: "rv",
     type: "raster",
     source: "rv",
-    paint: { "raster-opacity": 0.78 },
+    paint: { "raster-opacity": 0.78, "raster-resampling": "linear" },
   });
 }
 

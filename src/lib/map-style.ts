@@ -70,7 +70,19 @@ export function buildStyle(kind: MapStyle) {
   return rasterStyle(kind) as never;
 }
 
-/** NEXRAD Level III palette (RainViewer color 6). */
+/** RainViewer native max (2026 free API). Higher z returns "Zoom Level Not Supported". */
+export const RADAR_NATIVE_ZOOM = 7;
+
+export function radarRaster(tiles: string[]) {
+  return {
+    type: "raster" as const,
+    tiles,
+    tileSize: 256,
+    minzoom: 0,
+    maxzoom: RADAR_NATIVE_ZOOM,
+    attribution: "Radar © RainViewer · NOAA NWS",
+  };
+}
 export function radarTileUrl(host: string, path: string): string {
   const h = host.replace(/\/$/, "");
   const p = path.startsWith("/") ? path : `/${path}`;

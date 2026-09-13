@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useStorm } from "@/lib/store";
-import { buildStyle, ncepWmsUrl, radarTileUrl, satelliteTileUrl } from "@/lib/map-style";
+import { buildStyle, ncepWmsUrl, radarRaster, radarTileUrl, satelliteTileUrl } from "@/lib/map-style";
 import { findVehicle, INTEL_TYPES } from "@/lib/catalog";
 
 type MapLibre = typeof import("maplibre-gl");
@@ -155,19 +155,19 @@ export function MapCanvas() {
         tiles = [ncepWmsUrl()];
       }
       if (tiles) {
-        const existing = map.getSource("radar") as RasterSrc | undefined;
-        if (existing && typeof existing.setTiles === "function") {
+        const existing = map.getSource("radar") as (RasterSrc & { maxzoom?: number }) | undefined;
+        if (existing && typeof existing.setTiles === "function" && existing.maxzoom === 7) {
           existing.setTiles(tiles);
         } else {
           dropLayer(map, "radar");
-          map.addSource("radar", { type: "raster", tiles, tileSize: 256 });
+          map.addSource("radar", radarRaster(tiles));
           const before = firstSymbol(map);
           map.addLayer(
             {
               id: "radar",
               type: "raster",
               source: "radar",
-              paint: { "raster-opacity": 0.72 },
+              paint: { "raster-opacity": 0.72, "raster-resampling": "linear" },
             },
             before,
           );
@@ -181,11 +181,7 @@ export function MapCanvas() {
       const sat = weather.radar.satellite;
       const fr = sat[sat.length - 1];
       if (fr) {
-        map.addSource("sat", {
-          type: "raster",
-          tiles: [satelliteTileUrl(weather.radar.host, fr.path)],
-          tileSize: 256,
-        });
+        map.addSource("sat", radarRaster([satelliteTileUrl(weather.radar.host, fr.path)]));
         map.addLayer({
           id: "sat",
           type: "raster",
