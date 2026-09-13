@@ -93,13 +93,13 @@ export function DestSheet() {
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Town, state, or full US address"
+        placeholder="Business, town, or address"
         className="w-full min-h-12 rounded-md bg-bg border border-border px-3 text-sm"
       />
       <div className="mt-2">
-        {busy && <p className="text-xs text-muted py-3">Searching US addresses…</p>}
+        {busy && <p className="text-xs text-muted py-3">Searching nearby…</p>}
         {!busy && q.length >= 2 && hits.length === 0 && (
-          <p className="text-xs text-muted py-3">No match — try 123 Main St, City, ST</p>
+          <p className="text-xs text-muted py-3">No match — try a business name or 123 Main St, City, ST</p>
         )}
         {hits.map((h, i) => (
           <button
@@ -112,7 +112,10 @@ export function DestSheet() {
             onClick={() => setPending(h)}
           >
             <p className="text-sm font-medium">{h.name}</p>
-            <p className="text-xs text-muted">{h.sub}</p>
+            <p className="text-xs text-muted">
+              {h.meters != null ? `${(h.meters / 1609.34).toFixed(h.meters < 1609 ? 1 : 0)} mi · ` : ""}
+              {h.sub}
+            </p>
           </button>
         ))}
       </div>

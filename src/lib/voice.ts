@@ -1,3 +1,5 @@
+import { useStorm } from "./store";
+
 let mediaCtx: AudioContext | null = null;
 let speakTimer = 0;
 let unlocked = false;
@@ -33,7 +35,7 @@ function pickVoice(): SpeechSynthesisVoice | null {
   );
 }
 
-function fireUtterance(text: string) {
+function fireUtterance(text: string, volume: number) {
   const synth = window.speechSynthesis;
   try {
     synth.resume();
@@ -41,7 +43,7 @@ function fireUtterance(text: string) {
     /* ignore */
   }
   const u = new SpeechSynthesisUtterance(String(text));
-  u.volume = 1;
+  u.volume = Math.max(0, Math.min(1, volume));
   u.rate = 1;
   u.pitch = 1;
   u.lang = "en-US";
@@ -50,9 +52,12 @@ function fireUtterance(text: string) {
   synth.speak(u);
 }
 
-export function speak(text: string, force = false, voiceOn = false) {
-  if (!voiceOn && !force) return;
+export function speak(text: string, force = false) {
   if (typeof window === "undefined" || !window.speechSynthesis || !text) return;
+  const prefs = useStorm.getState().prefs;
+  if (!force && !prefs.voice) return;
+  const volume = prefs.voiceVolume ?? 0.85;
+  if (volume <= 0.01) return;
   try {
     armMediaVolume();
     const synth = window.speechSynthesis;
@@ -64,10 +69,10 @@ export function speak(text: string, force = false, voiceOn = false) {
       synth.cancel();
       speakTimer = window.setTimeout(() => {
         speakTimer = 0;
-        fireUtterance(text);
+        fireUtterance(text, volume);
       }, 60);
     } else {
-      fireUtterance(text);
+      fireUtterance(text, volume);
     }
   } catch {
     /* ignore */

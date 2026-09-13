@@ -202,6 +202,7 @@ export type Prefs = UnitPrefs & {
   buildings3d: boolean;
   scaleBar: boolean;
   voice: boolean;
+  voiceVolume: number;
   haptics: boolean;
   incognito: boolean;
   analytics: boolean;

@@ -96,3 +96,17 @@ export function sampleLine(
   }
   return out;
 }
+
+export function nearestIndex(coords: [number, number][], lat: number, lon: number): number {
+  if (coords.length === 0) return 0;
+  let best = 0;
+  let d = Infinity;
+  for (let i = 0; i < coords.length; i++) {
+    const m = haversineM(lat, lon, coords[i][1], coords[i][0]);
+    if (m < d) {
+      d = m;
+      best = i;
+    }
+  }
+  return best;
+}

@@ -323,23 +323,67 @@ export const geocode = createServerFn({ method: "GET" })
     };
     const enc = encodeURIComponent(q);
     const loc = `${bias.lon},${bias.lat}`;
-    const far =
-      /\d/.test(q) || /,/.test(q) || /\b[A-Z]{2}\b/.test(q) || /\b(california|texas|florida|alaska|hawaii|new york)\b/i.test(q);
-    const dist = far ? "" : "&distance=150000";
+    const isAddr = /\d/.test(q) || /\b(st|street|ave|avenue|rd|road|ln|lane|dr|drive|blvd|hwy|highway|il|mo)\b/i.test(q);
+    const dist = isAddr ? "" : "&distance=80000";
+    const west = (bias.lon - 0.55).toFixed(4);
+    const east = (bias.lon + 0.55).toFixed(4);
+    const south = (bias.lat - 0.45).toFixed(4);
+    const north = (bias.lat + 0.45).toFixed(4);
+    const sug =
+      `https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/suggest?f=json&text=${enc}&location=${loc}&maxSuggestions=8&countryCode=USA`;
     const arc =
       `https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?f=json&countryCode=USA&maxLocations=10&outFields=Addr_type,Match_addr,LongLabel,PlaceName,StAddr,Place_addr,City,Region,Postal&location=${loc}${dist}&SingleLine=${enc}`;
-    const nom = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&countrycodes=us&dedupe=1&limit=8&q=${enc}`;
+    const nom = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&countrycodes=us&dedupe=1&limit=8&q=${enc}&viewbox=${west},${north},${east},${south}&bounded=0`;
     const pho = `https://photon.komoot.io/api/?q=${enc}&lat=${bias.lat}&lon=${bias.lon}&limit=10&lang=en`;
-    const census = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${enc}&benchmark=Public_AR_Current&format=json`;
+    const census = isAddr
+      ? `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${enc}&benchmark=Public_AR_Current&format=json`
+      : "";
 
-    const [a, n, p, c] = await Promise.all([
-      getJsonSoft(arc, 7000),
-      getJsonSoft(nom, 7000),
-      getJsonSoft(pho, 7000),
-      getJsonSoft(census, 7000),
+    const [suggestRaw, a, n, p, c] = await Promise.all([
+      getJsonSoft(sug, 5000),
+      getJsonSoft(arc, 5000),
+      getJsonSoft(nom, 5000),
+      getJsonSoft(pho, 5000),
+      census ? getJsonSoft(census, 5000) : Promise.resolve(null),
     ]);
 
     const hits: PlaceHit[] = [];
+    const suggestions = ((suggestRaw as Record<string, unknown> | null)?.suggestions ?? []) as {
+      text?: string;
+      magicKey?: string;
+    }[];
+    const resolved = await Promise.all(
+      suggestions.slice(0, 6).map(async (s) => {
+        if (!s.magicKey || !s.text) return null;
+        const url =
+          `https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?f=json&magicKey=${encodeURIComponent(s.magicKey)}&SingleLine=${encodeURIComponent(s.text)}&maxLocations=1&outFields=Addr_type,Match_addr,LongLabel,PlaceName,StAddr,Place_addr,City,Region,Postal`;
+        return getJsonSoft(url, 5000);
+      }),
+    );
+    for (const row of resolved) {
+      const cand = ((row as Record<string, unknown> | null)?.candidates ?? []) as Record<string, unknown>[];
+      const first = cand[0];
+      if (!first) continue;
+      const locn = (first.location ?? {}) as Record<string, unknown>;
+      const attr = (first.attributes ?? {}) as Record<string, unknown>;
+      const lat = finite(locn.y);
+      const lon = finite(locn.x);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+      const place = String(attr.PlaceName ?? "");
+      const city = String(attr.City ?? "");
+      const region = String(attr.Region ?? "");
+      const street = String(attr.StAddr ?? "");
+      const kind = String(attr.Addr_type ?? "POI");
+      hits.push({
+        name: place || String(attr.LongLabel ?? first.address ?? q),
+        sub: [street, city, region === "Illinois" ? "IL" : region].filter(Boolean).join(", "),
+        lat,
+        lon,
+        kind,
+        rank: kind === "POI" ? 0 : 1,
+      });
+    }
+
     const candidates = ((a as Record<string, unknown> | null)?.candidates ?? []) as Record<string, unknown>[];
     for (const row of candidates) {
       const locn = (row.location ?? {}) as Record<string, unknown>;
@@ -444,9 +488,14 @@ export const geocode = createServerFn({ method: "GET" })
       });
     }
 
+    const qn = q.toLowerCase();
     const uniq = uniquePlaces(hits);
     for (const h of uniq) {
       h.meters = haversineM(bias.lat, bias.lon, h.lat, h.lon);
+      const nm = h.name.toLowerCase();
+      const nameHit = nm.startsWith(qn) ? 0 : nm.includes(qn) ? 1 : 3;
+      const poi = h.kind === "POI" || h.kind === "poi" || h.kind === "shop" || h.kind === "amenity";
+      h.rank = nameHit * 10 + (poi && !isAddr ? 0 : (h.rank ?? 2)) + (h.meters > 120000 ? 8 : h.meters > 40000 ? 3 : 0);
     }
     uniq.sort((x, y) => (x.rank ?? 9) - (y.rank ?? 9) || (x.meters ?? 0) - (y.meters ?? 0));
     return uniq.slice(0, 10);
@@ -454,11 +503,49 @@ export const geocode = createServerFn({ method: "GET" })
 
 function stepInstruction(s: Record<string, unknown>): { instruction: string; modifier: string | null } {
   const man = (s.maneuver ?? {}) as Record<string, unknown>;
-  const type = String(man.type ?? "turn");
-  const mod = man.modifier ? String(man.modifier) : null;
+  const type = String(man.type ?? "turn").replace(/_/g, " ");
+  const mod = man.modifier ? String(man.modifier).replace(/_/g, " ") : null;
   const name = String(s.name ?? "");
-  const bits = [type.replace(/_/g, " "), mod, name && `onto ${name}`].filter(Boolean);
-  return { instruction: bits.join(" "), modifier: mod };
+  const onto = name ? ` onto ${name}` : "";
+  let instruction = "Continue";
+  switch (type) {
+    case "depart":
+      instruction = `Head ${mod ?? "out"}${onto}`;
+      break;
+    case "arrive":
+      instruction = "Arrive at your destination";
+      break;
+    case "turn":
+      instruction = `Turn ${mod ?? "ahead"}${onto}`;
+      break;
+    case "new name":
+    case "continue":
+      instruction = `Continue${onto}`;
+      break;
+    case "merge":
+      instruction = `Merge ${mod ?? ""}${onto}`.replace(/\s+/g, " ").trim();
+      break;
+    case "on ramp":
+      instruction = `Take the ramp${onto}`;
+      break;
+    case "off ramp":
+    case "exit rotary":
+      instruction = `Take the exit${mod ? ` ${mod}` : ""}${onto}`;
+      break;
+    case "fork":
+      instruction = `Keep ${mod ?? "straight"} at the fork${onto}`;
+      break;
+    case "end of road":
+      instruction = `Turn ${mod ?? "left"} at the end of the road${onto}`;
+      break;
+    case "roundabout":
+    case "rotary":
+      instruction = `Enter the roundabout${onto}`;
+      break;
+    default:
+      instruction = `${type}${mod ? ` ${mod}` : ""}${onto}`.trim();
+  }
+  return { instruction, modifier: mod };
 }
 
 function parseRoute(r0: Record<string, unknown>, gale: GaleReport, stormPath: StormPathDetour | null): RoutePlan {

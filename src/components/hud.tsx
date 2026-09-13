@@ -33,6 +33,7 @@ export function MapHud() {
   const cone = useStorm((s) => s.cone);
   const clock = useStorm((s) => s.clock);
   const remainSec = useStorm((s) => s.remainSec);
+  const navStep = useStorm((s) => s.navStep);
   const gpsDenied = useStorm((s) => s.gpsDenied);
   const locKind = useStorm((s) => s.locKind);
   const alerts = weather?.alerts;
@@ -44,7 +45,9 @@ export function MapHud() {
   const radarIdx = useStorm((s) => s.radarIdx);
   const [open, setOpen] = useState(false);
   const mph = msToSpeed(gps?.speed_ms ?? 0, prefs.speed);
-  const step = plan?.steps.find((s) => s.distance_m > 40) ?? plan?.steps[0];
+  const step =
+    plan?.steps.slice(navStep).find((s) => s.distance_m > 30) ??
+    plan?.steps[Math.min(navStep, Math.max(0, (plan.steps.length || 1) - 1))];
   const radarAt = weather?.radar.frames[Math.max(0, Math.min((weather.radar.frames.length || 1) - 1, radarIdx))]?.time
     ?? weather?.radar.frames[weather.radar.frames.length - 1]?.time;
   const win = driveWindowCopy(clock, !!dest, remainSec);
@@ -229,7 +232,7 @@ export function MapHud() {
           onClick={() => patch({ sheet: "dest" })}
         >
           <small className="block text-micro tracking-widest text-primary font-medium">SET DESTINATION</small>
-          <span className="text-sm">{dest?.name ?? "Town, state, or address"}</span>
+          <span className="text-sm">{dest?.name ?? "Business, town, or address"}</span>
         </button>
         <button
           type="button"

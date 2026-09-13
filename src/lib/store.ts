@@ -67,7 +67,9 @@ type StormState = {
   lastMode: GateMode | null;
   stormPath: StormPathDetour | null;
   lastSpoken: string;
+  navStep: number;
   vehicleId: string | null;
+  trail: [number, number][];
   intel: IntelItem[];
   reports: Partial<Record<SourceKey, SrcReport[]>>;
   srcOk: Partial<Record<SourceKey, boolean>>;
@@ -96,6 +98,7 @@ const defaultPrefs: Prefs = {
   buildings3d: true,
   scaleBar: true,
   voice: false,
+  voiceVolume: 0.85,
   haptics: true,
   incognito: false,
   analytics: false,
@@ -168,7 +171,9 @@ export const useStorm = create<StormState>()(
       lastMode: null,
       stormPath: null,
       lastSpoken: "",
+      navStep: 0,
       vehicleId: "nimbus",
+      trail: [],
       intel: [],
       reports: {},
       srcOk: {},
@@ -225,6 +230,14 @@ export const useStorm = create<StormState>()(
       name: "storm-path-v3",
       storage,
       skipHydration: true,
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<StormState>;
+        return {
+          ...current,
+          ...p,
+          prefs: { ...current.prefs, ...(p.prefs ?? {}) },
+        };
+      },
       partialize: (s) => ({
         prefs: s.prefs,
         style: s.style,

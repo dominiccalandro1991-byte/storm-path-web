@@ -7,6 +7,7 @@ import { speak } from "@/lib/voice";
 import { useStorm } from "@/lib/store";
 import { ORIGIN } from "@/lib/engines/constants";
 import { haversineM } from "@/lib/engines/geo";
+import { announceFor, formatStep, nextStepIndex } from "@/lib/nav";
 import { dotFor } from "@/lib/dot";
 import { requestGps } from "@/hooks/use-gps";
 
@@ -48,12 +49,11 @@ function applyAtmosphere() {
       : s.placeLabel,
     dotName: w?.place?.state ? dotFor(w.place.state).name : s.dotName,
   });
-  const voice = useStorm.getState().prefs.voice;
   if (cone.risk === "INTERSECT" && prevCone !== "INTERSECT") {
-    speak(`Storm intersect on route. ${cone.copy}`, false, voice);
+    speak(`Storm intersect on route. ${cone.copy}`);
   }
   if (clock.risk === "IMPACT" && prevClock !== "IMPACT") {
-    speak(`Storm clock impact window. ${clock.copy}`, false, voice);
+    speak(`Storm clock impact window. ${clock.copy}`);
   }
 }
 
@@ -152,6 +152,32 @@ export function useAtmosphere() {
   }, []);
 
   useEffect(() => {
+    const gps = useStorm.getState().gps;
+    const plan = useStorm.getState().plan;
+    if (!gps || !plan?.steps.length || !useStorm.getState().navigating) return;
+    const i = nextStepIndex(plan.steps, gps.lat, gps.lon, useStorm.getState().navStep);
+    const step = plan.steps[i];
+    if (!step) return;
+    const dist = haversineM(gps.lat, gps.lon, step.location[1], step.location[0]);
+    const dest = useStorm.getState().dest;
+    if (dest && haversineM(gps.lat, gps.lon, dest.lat, dest.lon) < 40) {
+      if (useStorm.getState().lastSpoken !== "arrived") {
+        speak("You have arrived.");
+        useStorm.getState().patch({ lastSpoken: "arrived", navStep: plan.steps.length - 1 });
+      }
+      return;
+    }
+    if (dist > 700) {
+      if (useStorm.getState().navStep !== i) useStorm.getState().patch({ navStep: i });
+      return;
+    }
+    const line = announceFor(step, dist);
+    if (line === useStorm.getState().lastSpoken) return;
+    speak(line);
+    useStorm.getState().patch({ lastSpoken: line, navStep: i });
+  }, [gps?.lat, gps?.lon]);
+
+  useEffect(() => {
     const id = window.setInterval(() => {
       const cur = useStorm.getState();
       const frames = cur.weather?.radar.frames.length ?? 0;
@@ -181,17 +207,17 @@ export async function startDrive(place: { name: string; lat: number; lon: number
       plan: r,
       remainSec: Math.round(r.duration_s),
       stormPath: r.stormPath,
-      lastSpoken: step?.instruction ?? "",
+      lastSpoken: "",
+      navStep: 0,
     });
     applyAtmosphere();
-    const voice = useStorm.getState().prefs.voice;
     if (r.stormPath) {
       s.ping(`STORM PATH · +${r.stormPath.extraMin} MIN · AVOIDS ${r.stormPath.event}`);
-      speak(`Storm path reroute, plus ${r.stormPath.extraMin} minutes.`, false, voice);
+      speak(`Storm path reroute, plus ${r.stormPath.extraMin} minutes.`);
     } else {
-      speak(`Route set. ${Math.round(r.distance_m / 1609.34)} miles.`, false, voice);
+      speak(`Route set. ${Math.round(r.distance_m / 1609.34)} miles.`);
     }
-    if (step?.instruction) speak(step.instruction, false, voice);
+    if (step) speak(formatStep(step));
   } catch {
     s.ping("ROUTE FAILED");
   }
@@ -204,6 +230,7 @@ export function clearRoute() {
     remainSec: null,
     stormPath: null,
     lastSpoken: "",
+    navStep: 0,
     navigating: false,
   });
   applyAtmosphere();

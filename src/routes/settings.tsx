@@ -120,7 +120,7 @@ function Page() {
           />
           <Row
             title="Voice nav"
-            copy="Turn-by-turn at full volume. On-device Web Speech API — nothing is uploaded."
+            copy="Turn-by-turn as you drive. Spoken on this device — nothing is uploaded."
             action={
               <button
                 type="button"
@@ -128,7 +128,7 @@ function Page() {
                 onClick={() => {
                   const next = !prefs.voice;
                   setPrefs({ voice: next });
-                  if (next) speak("Voice navigation on.", true, true);
+                  if (next) speak("Voice navigation on.", true);
                   else cancelVoice();
                 }}
               >
@@ -136,6 +136,26 @@ function Page() {
               </button>
             }
           />
+          <div className="space-y-1 pt-1">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm">Voice volume</p>
+              <span className="font-mono text-xs text-primary tabular">
+                {Math.round((prefs.voiceVolume ?? 0.85) * 100)}%
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={Math.round((prefs.voiceVolume ?? 0.85) * 100)}
+              onChange={(e) => setPrefs({ voiceVolume: Number(e.target.value) / 100 })}
+              onPointerUp={() => {
+                if (useStorm.getState().prefs.voice) speak("Volume set.", true);
+              }}
+              className="w-full accent-primary"
+              aria-label="Voice volume"
+            />
+          </div>
           <Toggle label="Keep map north-up" checked={prefs.northUp} onChange={(v) => setPrefs({ northUp: v })} />
           <Toggle label="Severe weather alerts" checked={prefs.alertSevere} onChange={(v) => setPrefs({ alertSevere: v })} />
           <Toggle label="Incognito navigation" checked={prefs.incognito} onChange={(v) => setPrefs({ incognito: v })} />

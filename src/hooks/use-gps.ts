@@ -1,11 +1,16 @@
 import { useEffect, useRef } from "react";
 import { useStorm } from "@/lib/store";
+import { haversineM } from "@/lib/engines/geo";
 
-const GEO_OPTS: PositionOptions = { enableHighAccuracy: true, maximumAge: 8000, timeout: 14000 };
+const GEO_OPTS: PositionOptions = { enableHighAccuracy: true, maximumAge: 2500, timeout: 14000 };
 
 function applyFix(pos: GeolocationPosition) {
   const { latitude: lat, longitude: lon, accuracy, altitude, speed, heading } = pos.coords;
-  useStorm.getState().patch({
+  const s = useStorm.getState();
+  const last = s.trail[s.trail.length - 1];
+  const moved = !last || haversineM(last[1], last[0], lat, lon) > 10;
+  const trail = moved ? [...s.trail, [lon, lat] as [number, number]].slice(-800) : s.trail;
+  s.patch({
     gpsDenied: false,
     gpsLost: false,
     locKind: "gps",
@@ -19,6 +24,7 @@ function applyFix(pos: GeolocationPosition) {
       ts: pos.timestamp,
     },
     center: { lat, lon },
+    trail,
   });
 }
 
