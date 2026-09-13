@@ -1,8 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { useStorm } from "@/lib/store";
-import { buildStyle, ncepWmsUrl, radarRaster, radarTileUrl, satelliteTileUrl } from "@/lib/map-style";
+import {
+  aqiTileUrl,
+  buildStyle,
+  goesIrUrl,
+  iemNexradUrl,
+  IEM_RADAR_ZOOM,
+  overlayRaster,
+  radarRaster,
+  radarTileUrl,
+} from "@/lib/map-style";
 import { findVehicle, INTEL_TYPES } from "@/lib/catalog";
 import { nearestIndex } from "@/lib/engines/geo";
+import { cToTemp } from "@/lib/engines/units";
+import { fetchOverlayGrid, tempColor, windColor, type GridPt } from "@/lib/overlay-grid";
 
 type MapLibre = typeof import("maplibre-gl");
 type MapInst = import("maplibre-gl").Map;
@@ -23,6 +34,8 @@ function htmlMark(src: string, w: number, h: number) {
 }
 
 function dropLayer(map: MapInst, id: string) {
+  if (map.getLayer(`${id}-lbl`)) map.removeLayer(`${id}-lbl`);
+  if (map.getLayer(`${id}-case`)) map.removeLayer(`${id}-case`);
   if (map.getLayer(id)) map.removeLayer(id);
   if (map.getSource(id)) map.removeSource(id);
 }
@@ -77,26 +90,109 @@ function putLine(
   });
 }
 
+function setRaster(
+  map: MapInst,
+  id: string,
+  spec: ReturnType<typeof overlayRaster>,
+  opacity: number,
+) {
+  const existing = map.getSource(id) as (RasterSrc & { maxzoom?: number }) | undefined;
+  if (existing && typeof existing.setTiles === "function" && existing.maxzoom === spec.maxzoom) {
+    existing.setTiles(spec.tiles);
+    return;
+  }
+  dropLayer(map, id);
+  map.addSource(id, spec);
+  const before = firstSymbol(map);
+  map.addLayer(
+    {
+      id,
+      type: "raster",
+      source: id,
+      paint: { "raster-opacity": opacity, "raster-resampling": "linear" },
+    },
+    before,
+  );
+}
+
+function gridFc(pts: GridPt[], kind: "temp" | "wind", tempUnit: "F" | "C" | "K") {
+  return {
+    type: "FeatureCollection" as const,
+    features: pts.map((p) => ({
+      type: "Feature" as const,
+      properties: {
+        color: kind === "temp" ? tempColor(p.temp_c) : windColor(p.wind_ms),
+        label:
+          kind === "temp"
+            ? `${Math.round(cToTemp(p.temp_c, tempUnit))}°`
+            : `${Math.round(p.wind_ms * 2.237)}`,
+        deg: (p.wind_deg + 180) % 360,
+      },
+      geometry: { type: "Point" as const, coordinates: [p.lon, p.lat] },
+    })),
+  };
+}
+
+function putGrid(map: MapInst, id: string, pts: GridPt[], kind: "temp" | "wind", tempUnit: "F" | "C" | "K") {
+  const data = gridFc(pts, kind, tempUnit);
+  const existing = map.getSource(id) as GeoSrc | undefined;
+  if (existing && typeof existing.setData === "function") {
+    existing.setData(data);
+    return;
+  }
+  dropLayer(map, id);
+  map.addSource(id, { type: "geojson", data });
+  map.addLayer({
+    id,
+    type: "circle",
+    source: id,
+    paint: {
+      "circle-radius": 22,
+      "circle-color": ["get", "color"],
+      "circle-opacity": 0.42,
+      "circle-blur": 0.35,
+    },
+  });
+  map.addLayer({
+    id: `${id}-lbl`,
+    type: "symbol",
+    source: id,
+    layout: {
+      "text-field": kind === "wind" ? "▲" : ["get", "label"],
+      "text-size": kind === "wind" ? 14 : 11,
+      "text-rotate": kind === "wind" ? ["get", "deg"] : 0,
+      "text-allow-overlap": true,
+      "text-ignore-placement": true,
+    },
+    paint: { "text-color": "#e8fbff", "text-halo-color": "#041016", "text-halo-width": 1 },
+  });
+}
+
 export function MapCanvas() {
   const host = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapInst | null>(null);
   const libRef = useRef<MapLibre | null>(null);
   const vehRef = useRef<Marker | null>(null);
   const destRef = useRef<Marker | null>(null);
+  const pinRef = useRef<Marker | null>(null);
   const intelRef = useRef<Marker[]>([]);
   const vehIdRef = useRef<string | null>(null);
   const styleOnce = useRef<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [grid, setGrid] = useState<GridPt[]>([]);
   const style = useStorm((s) => s.style);
   const overlays = useStorm((s) => s.overlays);
   const weather = useStorm((s) => s.weather);
   const radarIdx = useStorm((s) => s.radarIdx);
+  const radarPlaying = useStorm((s) => s.radarPlaying);
   const follow = useStorm((s) => s.follow);
   const gps = useStorm((s) => s.gps);
   const center = useStorm((s) => s.center);
   const plan = useStorm((s) => s.plan);
   const dest = useStorm((s) => s.dest);
+  const dropPin = useStorm((s) => s.dropPin);
   const northUp = useStorm((s) => s.prefs.northUp);
+  const tempUnit = useStorm((s) => s.prefs.temp);
   const vehicleId = useStorm((s) => s.vehicleId);
   const intel = useStorm((s) => s.intel);
   const cone = useStorm((s) => s.cone);
@@ -125,6 +221,10 @@ export function MapCanvas() {
       styleOnce.current = initialStyle;
       map.addControl(new ml.ScaleControl({ maxWidth: 80 }), "bottom-left");
       map.on("dragstart", () => patch({ follow: false }));
+      map.on("click", (e) => {
+        if (useStorm.getState().sheet !== "none") return;
+        patch({ dropPin: { lat: e.lngLat.lat, lon: e.lngLat.lng }, follow: false });
+      });
       const onZoom = (e: Event) => {
         const d = (e as CustomEvent<number>).detail;
         map.zoomTo(map.getZoom() + d, { duration: 200 });
@@ -148,6 +248,7 @@ export function MapCanvas() {
       if (m?.__stormZoom) window.removeEventListener("storm-zoom", m.__stormZoom);
       vehRef.current?.remove();
       destRef.current?.remove();
+      pinRef.current?.remove();
       intelRef.current.forEach((mk) => mk.remove());
       mapRef.current?.remove();
       mapRef.current = null;
@@ -184,62 +285,63 @@ export function MapCanvas() {
   }, [gps, center, follow, northUp]);
 
   useEffect(() => {
+    const need = overlays.includes("temp") || overlays.includes("wind");
+    if (!need) return;
+    const here = gps ?? center;
+    let dead = false;
+    void fetchOverlayGrid(here.lat, here.lon)
+      .then((pts) => {
+        if (!dead) setGrid(pts);
+      })
+      .catch(() => undefined);
+    return () => {
+      dead = true;
+    };
+  }, [overlays, gps?.lat, gps?.lon, center.lat, center.lon]);
+
+  useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
 
     const radarOn = overlays.includes("radar");
-    const satOn =
-      (overlays.includes("sat") || overlays.includes("ir")) && !!weather?.radar.satellite?.length;
+    const satOn = overlays.includes("sat") || overlays.includes("ir");
+    const aqiOn = overlays.includes("aqi");
+    const here = gps ?? center;
 
     if (!radarOn) {
       dropLayer(map, "radar");
+    } else if (radarPlaying && weather?.radar.kind === "rainviewer" && weather.radar.frames.length) {
+      const frames = weather.radar.frames;
+      const idx = Math.max(0, Math.min(frames.length - 1, radarIdx));
+      const fr = frames[idx] ?? frames[frames.length - 1];
+      if (fr) setRaster(map, "radar", radarRaster([radarTileUrl(weather.radar.host, fr.path)]), 0.72);
     } else {
-      let tiles: string[] | null = null;
-      if (weather?.radar.kind === "rainviewer" && weather.radar.frames.length) {
-        const frames = weather.radar.frames;
-        const idx = Math.max(0, Math.min(frames.length - 1, radarIdx));
-        const fr = frames[idx] ?? frames[frames.length - 1];
-        if (fr) tiles = [radarTileUrl(weather.radar.host, fr.path)];
-      } else {
-        tiles = [ncepWmsUrl()];
-      }
-      if (tiles) {
-        const existing = map.getSource("radar") as (RasterSrc & { maxzoom?: number }) | undefined;
-        if (existing && typeof existing.setTiles === "function" && existing.maxzoom === 7) {
-          existing.setTiles(tiles);
-        } else {
-          dropLayer(map, "radar");
-          map.addSource("radar", radarRaster(tiles));
-          const before = firstSymbol(map);
-          map.addLayer(
-            {
-              id: "radar",
-              type: "raster",
-              source: "radar",
-              paint: { "raster-opacity": 0.72, "raster-resampling": "linear" },
-            },
-            before,
-          );
-        }
-      }
+      setRaster(
+        map,
+        "radar",
+        overlayRaster([iemNexradUrl()], "Radar © IEM · NOAA NWS", IEM_RADAR_ZOOM),
+        0.7,
+      );
     }
 
     if (!satOn) {
       dropLayer(map, "sat");
-    } else if (weather?.radar.satellite?.length && !map.getSource("sat")) {
-      const sat = weather.radar.satellite;
-      const fr = sat[sat.length - 1];
-      if (fr) {
-        map.addSource("sat", radarRaster([satelliteTileUrl(weather.radar.host, fr.path)]));
-        map.addLayer({
-          id: "sat",
-          type: "raster",
-          source: "sat",
-          paint: { "raster-opacity": 0.45 },
-        });
-      }
+    } else {
+      setRaster(map, "sat", overlayRaster([goesIrUrl(here.lon)], "GOES IR © NOAA · IEM", 8), 0.55);
     }
-  }, [ready, overlays, weather, radarIdx]);
+
+    if (!aqiOn) {
+      dropLayer(map, "aqi");
+    } else {
+      setRaster(map, "aqi", overlayRaster([aqiTileUrl()], "AQI © WAQI", 12), 0.85);
+    }
+
+    if (overlays.includes("temp") && grid.length) putGrid(map, "temp", grid, "temp", tempUnit);
+    else dropLayer(map, "temp");
+
+    if (overlays.includes("wind") && grid.length) putGrid(map, "wind", grid, "wind", tempUnit);
+    else dropLayer(map, "wind");
+  }, [ready, overlays, weather, radarIdx, radarPlaying, grid, gps?.lon, center.lon, tempUnit]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -333,6 +435,24 @@ export function MapCanvas() {
       destRef.current = new ml.Marker({ element: el }).setLngLat([dest.lon, dest.lat]).addTo(map);
     }
   }, [ready, dest]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const ml = libRef.current;
+    if (!map || !ml || !ready) return;
+    pinRef.current?.remove();
+    pinRef.current = null;
+    if (dropPin) {
+      const el = document.createElement("div");
+      el.style.width = "16px";
+      el.style.height = "16px";
+      el.style.borderRadius = "8px";
+      el.style.background = "#00e5ff";
+      el.style.border = "2px solid #041016";
+      el.style.boxShadow = "0 0 10px #00e5ff";
+      pinRef.current = new ml.Marker({ element: el }).setLngLat([dropPin.lon, dropPin.lat]).addTo(map);
+    }
+  }, [ready, dropPin]);
 
   useEffect(() => {
     const map = mapRef.current;

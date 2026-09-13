@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { confidenceCopy, evaluateAlerts, nextState } from "./and-gate.ts";
-import { driveWindowCopy, pairSeven, stepClock } from "./clock.ts";
+import { driveWindowCopy, isSevereNws, pairSeven, stepClock } from "./clock.ts";
 import { computeCone } from "./cone.ts";
 import { geomHits } from "./geom.ts";
 
@@ -70,6 +70,36 @@ test("pairSeven folds night lows into the day card", () => {
   assert.equal(days.length, 1);
   assert.equal(days[0]?.high, "82°F");
   assert.equal(days[0]?.low, "61°F");
+});
+
+test("SPS and watches are not severe NWS", () => {
+  assert.equal(isSevereNws({ event: "Special Weather Statement", severity: "Moderate" }), false);
+  assert.equal(isSevereNws({ event: "Flood Watch", severity: "Moderate" }), false);
+  assert.equal(isSevereNws({ event: "Tornado Warning", severity: "Extreme" }), true);
+});
+
+test("moderate special weather statement is not IMPACT without hazard forecast", () => {
+  const c = stepClock({
+    hours: [
+      { when: "now", forecast: "Mostly cloudy" },
+      { when: "+1h", forecast: "Clear" },
+    ],
+    days: [],
+    alertCount: 0,
+  });
+  assert.equal(c.risk, "CLEAR");
+});
+
+test("severe warning count stains the next 4 hours as IMPACT", () => {
+  const c = stepClock({
+    hours: [
+      { when: "now", forecast: "Mostly cloudy" },
+      { when: "+1h", forecast: "Clear" },
+    ],
+    days: [],
+    alertCount: 1,
+  });
+  assert.equal(c.risk, "IMPACT");
 });
 
 test("intersect cone CLEAR without a route, INTERSECT on polygon hit", () => {

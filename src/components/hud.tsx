@@ -4,6 +4,7 @@ import { msToSpeed, speedSuffix } from "@/lib/engines/units";
 import { driveWindowCopy } from "@/lib/engines/clock";
 import type { MapStyle, OverlayId } from "@/lib/types";
 import { VehicleThumb } from "./sheets";
+import { startDrive } from "@/hooks/use-atmosphere";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -25,10 +26,12 @@ const OVL: { id: OverlayId; label: string }[] = [
 export function MapHud() {
   const gps = useStorm((s) => s.gps);
   const dest = useStorm((s) => s.dest);
+  const dropPin = useStorm((s) => s.dropPin);
   const plan = useStorm((s) => s.plan);
   const prefs = useStorm((s) => s.prefs);
   const weather = useStorm((s) => s.weather);
   const radarLive = useStorm((s) => s.radarLive);
+  const radarPlaying = useStorm((s) => s.radarPlaying);
   const stormPath = useStorm((s) => s.stormPath);
   const cone = useStorm((s) => s.cone);
   const clock = useStorm((s) => s.clock);
@@ -52,9 +55,14 @@ export function MapHud() {
     ?? weather?.radar.frames[weather.radar.frames.length - 1]?.time;
   const win = driveWindowCopy(clock, !!dest, remainSec);
   const alert0 = alerts?.[0];
-  const showClock = clock.slots.length > 0 || clock.risk === "IMPACT";
+  const showClock = clock.risk !== "CLEAR";
   const showPath = !!(stormPath || cone.risk === "INTERSECT");
   const topPad = alert0 ? "top-14" : "top-2";
+  const radarLabel = radarPlaying && radarAt
+    ? `RADAR ${new Date(radarAt * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · LOOP`
+    : radarLive
+      ? "RADAR LIVE · NEXRAD"
+      : "RADAR CONNECTING";
 
   return (
     <>
@@ -67,17 +75,11 @@ export function MapHud() {
 
       <div
         className={cn(
-          "absolute left-2 z-20 max-w-[11.5rem] pointer-events-none font-mono text-micro tracking-wider bg-surface/90 border border-border px-2 py-1 text-primary",
+          "absolute left-2 z-20 max-w-[12.5rem] pointer-events-none font-mono text-micro tracking-wider bg-surface/90 border border-border px-2 py-1 text-primary",
           topPad,
         )}
       >
-        {radarAt
-          ? `RADAR ${new Date(radarAt * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · NEXRAD`
-          : weather?.radar.kind === "ncep-wms"
-            ? "RADAR · NOAA WMS"
-            : radarLive
-              ? "RADAR LIVE"
-              : "RADAR CONNECTING"}
+        {radarLabel}
         <span
           className="mt-1 block h-1.5 w-36 rounded-full"
           style={{
@@ -85,6 +87,12 @@ export function MapHud() {
               "linear-gradient(90deg,#9be38a,#3cb43c,#f8f060,#f0a020,#e03820,#c01880,#f0f0f0)",
           }}
         />
+        {(overlays.includes("sat") || overlays.includes("ir")) && (
+          <span className="block mt-1 text-muted">GOES IR</span>
+        )}
+        {overlays.includes("temp") && <span className="block text-muted">TEMP LIVE</span>}
+        {overlays.includes("wind") && <span className="block text-muted">WIND LIVE</span>}
+        {overlays.includes("aqi") && <span className="block text-muted">AQI · WAQI</span>}
       </div>
 
       {gpsDenied && !gps && (
@@ -225,6 +233,44 @@ export function MapHud() {
           )}
         >
           {clock.risk} · {win}
+        </div>
+      )}
+
+      {dropPin && (
+        <div className="absolute left-2 right-hud-side bottom-hud-stack z-30 bg-surface/98 border border-primary px-3 py-2">
+          <p className="text-micro tracking-widest text-primary">DROPPED PIN</p>
+          <p className="text-xs text-muted">
+            {dropPin.lat.toFixed(4)}, {dropPin.lon.toFixed(4)}
+          </p>
+          <div className="flex gap-2 mt-2">
+            <button
+              type="button"
+              className="flex-1 min-h-9 bg-primary text-primary-fg text-micro tracking-widest"
+              onClick={() =>
+                void startDrive({
+                  name: "Dropped pin",
+                  lat: dropPin.lat,
+                  lon: dropPin.lon,
+                }).then(() => patch({ dropPin: null }))
+              }
+            >
+              NAVIGATE
+            </button>
+            <button
+              type="button"
+              className="flex-1 min-h-9 border border-warn text-warn text-micro tracking-widest"
+              onClick={() => patch({ sheet: "intel" })}
+            >
+              REPORT
+            </button>
+            <button
+              type="button"
+              className="min-h-9 px-2 border border-border text-micro"
+              onClick={() => patch({ dropPin: null })}
+            >
+              CLEAR
+            </button>
+          </div>
         </div>
       )}
 

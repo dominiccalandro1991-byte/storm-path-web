@@ -49,6 +49,7 @@ type StormState = {
   offline: boolean;
   center: { lat: number; lon: number };
   dest: { name: string; lat: number; lon: number; sub?: string } | null;
+  dropPin: { lat: number; lon: number } | null;
   plan: RoutePlan | null;
   navigating: boolean;
   remainSec: number | null;
@@ -153,6 +154,7 @@ export const useStorm = create<StormState>()(
       offline: false,
       center: { lat: ORIGIN.lat, lon: ORIGIN.lon },
       dest: null,
+      dropPin: null,
       plan: null,
       navigating: false,
       remainSec: null,
@@ -161,7 +163,7 @@ export const useStorm = create<StormState>()(
       wxLive: false,
       radarLive: false,
       radarIdx: 0,
-      radarPlaying: true,
+      radarPlaying: false,
       hoursNws: [],
       daysNws: [],
       hourlyNow: null,

@@ -72,17 +72,24 @@ export function buildStyle(kind: MapStyle) {
 
 /** RainViewer native max (2026 free API). Higher z returns "Zoom Level Not Supported". */
 export const RADAR_NATIVE_ZOOM = 7;
+/** IEM NEXRAD ridge composite — sharper than RainViewer when zoomed in. */
+export const IEM_RADAR_ZOOM = 10;
 
-export function radarRaster(tiles: string[]) {
+export function overlayRaster(tiles: string[], attrib: string, maxzoom: number) {
   return {
     type: "raster" as const,
     tiles,
     tileSize: 256,
     minzoom: 0,
-    maxzoom: RADAR_NATIVE_ZOOM,
-    attribution: "Radar © RainViewer · NOAA NWS",
+    maxzoom,
+    attribution: attrib,
   };
 }
+
+export function radarRaster(tiles: string[]) {
+  return overlayRaster(tiles, "Radar © RainViewer · NOAA NWS", RADAR_NATIVE_ZOOM);
+}
+
 export function radarTileUrl(host: string, path: string): string {
   const h = host.replace(/\/$/, "");
   const p = path.startsWith("/") ? path : `/${path}`;
@@ -101,4 +108,19 @@ export function ncepWmsUrl(): string {
     "?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=conus_bref_qcd&STYLES=" +
     "&FORMAT=image/png&TRANSPARENT=TRUE&SRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256"
   );
+}
+
+/** Iowa State IEM latest CONUS NEXRAD mosaic. Works past RainViewer z7. */
+export function iemNexradUrl(): string {
+  return "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::USCOMP-N0Q-0/{z}/{x}/{y}.png";
+}
+
+/** GOES East/West clean IR (channel 13). RainViewer satellite feed is gone. */
+export function goesIrUrl(lon: number): string {
+  const bird = lon > -105 ? "east" : "west";
+  return `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/goes_${bird}_conus_ch13/{z}/{x}/{y}.png`;
+}
+
+export function aqiTileUrl(): string {
+  return "https://tiles.waqi.info/tiles/usepa-aqi/{z}/{x}/{y}.png?token=demo";
 }

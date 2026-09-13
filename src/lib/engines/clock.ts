@@ -29,6 +29,18 @@ export type ClockDay = {
 const HOT = /thunder|tornado|severe|flood|snow|ice|blizzard|hurricane|hail|warning/i;
 const WET = /rain|shower|storm|precip|drizzle/i;
 
+/** Warnings / Extreme / Severe only. SPS, watches, and advisories do not force IMPACT. */
+export function isSevereNws(a: { event?: string; severity?: string } | null | undefined): boolean {
+  if (!a) return false;
+  const e = (a.event || "").toLowerCase();
+  const sev = (a.severity || "").toLowerCase();
+  if (e.includes("statement") || e.includes("advisory") || e.includes("watch")) return false;
+  if (sev === "extreme" || sev === "severe") return true;
+  return /tornado warning|flash flood warning|severe thunderstorm warning|blizzard warning|hurricane warning|storm warning/.test(
+    e,
+  );
+}
+
 export function stepClock(input: {
   hours: ClockHour[];
   days: ClockDay[];
@@ -128,36 +140,22 @@ export function pairSeven(
     const p = periods[i];
     if (!p) continue;
     if (p.night) {
-      if (!out.length) {
-        out.push({
-          name: p.name,
-          high: "—",
-          low: p.temp,
-          short: p.short,
-          detail: p.detail,
-          wind: p.wind,
-          night: p.short,
-        });
-      } else {
-        const last = out[out.length - 1];
-        if (last && (!last.low || last.low === "—")) {
-          last.low = p.temp;
-          last.night = p.short;
-        }
+      const last = out[out.length - 1];
+      if (last) {
+        last.low = p.temp;
+        last.night = p.short;
       }
       continue;
     }
-    const n = periods[i + 1]?.night ? periods[i + 1] : null;
     out.push({
       name: p.name,
       high: p.temp,
-      low: n ? n.temp : "—",
+      low: "—",
       short: p.short,
       detail: p.detail,
       wind: p.wind,
-      night: n ? n.short : "",
+      night: "",
     });
-    if (n) i++;
   }
   return out;
 }

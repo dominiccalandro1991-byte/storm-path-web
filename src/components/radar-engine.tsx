@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Link } from "@tanstack/react-router";
 import { useStorm } from "@/lib/store";
-import { buildStyle, ncepWmsUrl, radarRaster, radarTileUrl } from "@/lib/map-style";
+import { buildStyle, iemNexradUrl, IEM_RADAR_ZOOM, overlayRaster, radarRaster, radarTileUrl } from "@/lib/map-style";
 import { cn } from "@/lib/utils";
 
 type MapInst = import("maplibre-gl").Map;
@@ -20,20 +20,20 @@ function radarLabel(
   return nowcast.has(t) ? `FCST ${clock}` : clock;
 }
 
-function paintRadar(map: MapInst, tiles: string[] | null) {
-  if (!tiles) {
+function paintRadar(map: MapInst, spec: { tiles: string[]; zoom: number } | null) {
+  if (!spec) {
     if (map.getLayer("rv")) map.removeLayer("rv");
     if (map.getSource("rv")) map.removeSource("rv");
     return;
   }
   const existing = map.getSource("rv") as (RasterSrc & { maxzoom?: number }) | undefined;
-  if (existing && typeof existing.setTiles === "function" && existing.maxzoom === 7) {
-    existing.setTiles(tiles);
+  if (existing && typeof existing.setTiles === "function" && existing.maxzoom === spec.zoom) {
+    existing.setTiles(spec.tiles);
     return;
   }
   if (map.getLayer("rv")) map.removeLayer("rv");
   if (map.getSource("rv")) map.removeSource("rv");
-  map.addSource("rv", radarRaster(tiles));
+  map.addSource("rv", spec.zoom === 7 ? radarRaster(spec.tiles) : overlayRaster(spec.tiles, "Radar © IEM · NOAA MRMS", spec.zoom));
   map.addLayer({
     id: "rv",
     type: "raster",
@@ -42,14 +42,13 @@ function paintRadar(map: MapInst, tiles: string[] | null) {
   });
 }
 
-function tilesFor(weather: NonNullable<ReturnType<typeof useStorm.getState>["weather"]>, idx: number) {
-  if (weather.radar.kind === "rainviewer" && weather.radar.frames.length) {
+function tilesFor(weather: NonNullable<ReturnType<typeof useStorm.getState>["weather"]>, idx: number, playing: boolean) {
+  if (playing && weather.radar.kind === "rainviewer" && weather.radar.frames.length) {
     const frames = weather.radar.frames;
     const fr = frames[Math.max(0, Math.min(frames.length - 1, idx))] ?? frames[frames.length - 1];
-    if (fr) return [radarTileUrl(weather.radar.host, fr.path)];
+    if (fr) return { tiles: [radarTileUrl(weather.radar.host, fr.path)], zoom: 7 as const };
   }
-  if (weather.radar.kind === "ncep-wms") return [ncepWmsUrl()];
-  return null;
+  return { tiles: [iemNexradUrl()], zoom: IEM_RADAR_ZOOM };
 }
 
 export function RadarEngine({ variant = "card" }: { variant?: "card" | "full" }) {
@@ -88,7 +87,7 @@ export function RadarEngine({ variant = "card" }: { variant?: "card" | "full" })
         map.resize();
         const w = useStorm.getState().weather;
         const i = useStorm.getState().radarIdx;
-        if (w) paintRadar(map, tilesFor(w, i));
+        if (w) paintRadar(map, tilesFor(w, i, useStorm.getState().radarPlaying));
       };
       map.once("load", onLoad);
       ro = new ResizeObserver(() => map.resize());
@@ -113,10 +112,10 @@ export function RadarEngine({ variant = "card" }: { variant?: "card" | "full" })
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !weather) return;
-    const draw = () => paintRadar(map, tilesFor(weather, idx));
+    const draw = () => paintRadar(map, tilesFor(weather, idx, playing));
     if (map.isStyleLoaded()) draw();
     else map.once("load", draw);
-  }, [weather, idx]);
+  }, [weather, idx, playing]);
 
   const legend = (
     <span

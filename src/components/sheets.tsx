@@ -59,10 +59,12 @@ export function DestSheet() {
   const patch = useStorm((s) => s.patch);
   const gps = useStorm((s) => s.gps);
   const center = useStorm((s) => s.center);
+  const places = useStorm((s) => s.places);
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [pending, setPending] = useState<SearchHit | null>(null);
   const [busy, setBusy] = useState(false);
+  const saved = places.filter((p) => p.kind === "home" || p.kind === "work" || p.kind === "saved").slice(0, 6);
 
   useEffect(() => {
     if (q.trim().length < 2) {
@@ -96,6 +98,38 @@ export function DestSheet() {
         placeholder="Business, town, or address"
         className="w-full min-h-12 rounded-md bg-bg border border-border px-3 text-sm"
       />
+      <div className="flex gap-1.5 mt-2 flex-wrap">
+        {[
+          { id: "Gas", q: "gas station" },
+          { id: "Food", q: "restaurant" },
+          { id: "Parking", q: "parking" },
+          { id: "Walmart", q: "Walmart" },
+        ].map((f) => (
+          <button
+            key={f.id}
+            type="button"
+            className="min-h-9 px-3 border border-border text-xs tracking-wide"
+            onClick={() => setQ(f.q)}
+          >
+            {f.id}
+          </button>
+        ))}
+      </div>
+      {saved.length > 0 && q.length < 2 && (
+        <div className="mt-2">
+          {saved.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className="block w-full text-left py-2 border-b border-border/70"
+              onClick={() => void startDrive({ name: p.name, lat: p.lat, lon: p.lon })}
+            >
+              <p className="text-sm font-medium">{p.name}</p>
+              <p className="text-xs text-muted uppercase tracking-wide">{p.kind}</p>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="mt-2">
         {busy && <p className="text-xs text-muted py-3">Searching nearby…</p>}
         {!busy && q.length >= 2 && hits.length === 0 && (
@@ -211,6 +245,7 @@ export function IntelSheet() {
   const patch = useStorm((s) => s.patch);
   const gps = useStorm((s) => s.gps);
   const center = useStorm((s) => s.center);
+  const dropPin = useStorm((s) => s.dropPin);
   const ping = useStorm((s) => s.ping);
   const [type, setType] = useState<string | null>(null);
   const [subtype, setSubtype] = useState<string | null>(null);
@@ -282,7 +317,7 @@ export function IntelSheet() {
           className="mt-3 w-full uppercase tracking-widest"
           onClick={() => {
             if (!spec || !type) return;
-            const at = gps ?? center;
+            const at = dropPin ?? gps ?? center;
             const item = {
               id: `i${Date.now()}`,
               type,
@@ -292,11 +327,11 @@ export function IntelSheet() {
               color: spec.color,
               lat: at.lat,
               lon: at.lon,
-              source: gps ? ("gps" as const) : ("map" as const),
+              source: dropPin ? ("map" as const) : gps ? ("gps" as const) : ("map" as const),
               ts: Date.now(),
             };
             const all = useStorm.getState().pruneIntel();
-            patch({ intel: [item, ...all].slice(0, 40), sheet: "none" });
+            patch({ intel: [item, ...all].slice(0, 40), sheet: "none", dropPin: null });
             ping(`INTEL POSTED · ${item.label}`);
           }}
         >

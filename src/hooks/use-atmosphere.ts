@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { fetchSources, fetchWeather, planRoute } from "@/lib/server/weather";
-import { stepClock } from "@/lib/engines/clock";
+import { stepClock, isSevereNws } from "@/lib/engines/clock";
 import { computeCone } from "@/lib/engines/cone";
 import { evaluateAlerts } from "@/lib/engines/and-gate";
 import { speak } from "@/lib/voice";
@@ -27,7 +27,7 @@ function applyAtmosphere() {
   const clock = stepClock({
     hours,
     days,
-    alertCount: (w?.alerts ?? []).length,
+    alertCount: (w?.alerts ?? []).filter(isSevereNws).length,
     coneIntersect: cone.risk === "INTERSECT",
     destSet: !!s.dest,
     remainSec: s.remainSec,
@@ -64,11 +64,9 @@ async function hydrate(lat: number, lon: number) {
     const w = await fetchWeather({ data: { lat, lon } });
     const frames = w.radar.frames;
     const pastN = Math.max(0, frames.length - w.radar.nowcastTimes.length);
+    const latest = Math.max(0, pastN - 1);
     const prev = useStorm.getState();
-    const idx =
-      prev.weather && prev.radarIdx < frames.length
-        ? prev.radarIdx
-        : Math.max(0, pastN - 1);
+    const idx = prev.radarPlaying && prev.weather && prev.radarIdx < frames.length ? prev.radarIdx : latest;
     patch({
       weather: w,
       weatherBusy: false,
@@ -167,7 +165,7 @@ export function useAtmosphere() {
       }
       return;
     }
-    if (dist > 700) {
+    if (dist > 3200) {
       if (useStorm.getState().navStep !== i) useStorm.getState().patch({ navStep: i });
       return;
     }
