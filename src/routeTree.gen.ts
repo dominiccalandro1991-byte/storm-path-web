@@ -10,8 +10,10 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DriverRouteImport } from './routes/driver'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as NavigateRouteImport } from './routes/navigate'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as SavedRouteImport } from './routes/saved'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as WeatherRouteImport } from './routes/weather'
@@ -22,6 +24,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DriverRoute = DriverRouteImport.update({
+  id: '/driver',
+  path: '/driver',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -30,6 +37,11 @@ const LoginRoute = LoginRouteImport.update({
 const NavigateRoute = NavigateRouteImport.update({
   id: '/navigate',
   path: '/navigate',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SavedRoute = SavedRouteImport.update({
@@ -55,8 +67,10 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/driver': typeof DriverRoute
   '/login': typeof LoginRoute
   '/navigate': typeof NavigateRoute
+  '/privacy': typeof PrivacyRoute
   '/saved': typeof SavedRoute
   '/settings': typeof SettingsRoute
   '/weather': typeof WeatherRoute
@@ -64,8 +78,10 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/driver': typeof DriverRoute
   '/login': typeof LoginRoute
   '/navigate': typeof NavigateRoute
+  '/privacy': typeof PrivacyRoute
   '/saved': typeof SavedRoute
   '/settings': typeof SettingsRoute
   '/weather': typeof WeatherRoute
@@ -74,8 +90,10 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/driver': typeof DriverRoute
   '/login': typeof LoginRoute
   '/navigate': typeof NavigateRoute
+  '/privacy': typeof PrivacyRoute
   '/saved': typeof SavedRoute
   '/settings': typeof SettingsRoute
   '/weather': typeof WeatherRoute
@@ -85,8 +103,10 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/driver'
     | '/login'
     | '/navigate'
+    | '/privacy'
     | '/saved'
     | '/settings'
     | '/weather'
@@ -94,8 +114,10 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/driver'
     | '/login'
     | '/navigate'
+    | '/privacy'
     | '/saved'
     | '/settings'
     | '/weather'
@@ -103,8 +125,10 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/driver'
     | '/login'
     | '/navigate'
+    | '/privacy'
     | '/saved'
     | '/settings'
     | '/weather'
@@ -113,8 +137,10 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DriverRoute: typeof DriverRoute
   LoginRoute: typeof LoginRoute
   NavigateRoute: typeof NavigateRoute
+  PrivacyRoute: typeof PrivacyRoute
   SavedRoute: typeof SavedRoute
   SettingsRoute: typeof SettingsRoute
   WeatherRoute: typeof WeatherRoute
@@ -130,6 +156,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/driver': {
+      id: '/driver'
+      path: '/driver'
+      fullPath: '/driver'
+      preLoaderRoute: typeof DriverRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -142,6 +175,13 @@ declare module '@tanstack/react-router' {
       path: '/navigate'
       fullPath: '/navigate'
       preLoaderRoute: typeof NavigateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/saved': {
@@ -177,8 +217,10 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DriverRoute: DriverRoute,
   LoginRoute: LoginRoute,
   NavigateRoute: NavigateRoute,
+  PrivacyRoute: PrivacyRoute,
   SavedRoute: SavedRoute,
   SettingsRoute: SettingsRoute,
   WeatherRoute: WeatherRoute,

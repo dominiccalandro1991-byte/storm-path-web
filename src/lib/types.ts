@@ -1,5 +1,10 @@
 import type { GaleReport } from "./engines/gale";
 import type { UnitPrefs } from "./engines/units";
+import type { ClockState } from "./engines/clock";
+import type { ConeState } from "./engines/cone";
+import type { GateMode } from "./engines/and-gate";
+import type { GeoGeom } from "./engines/geom";
+import type { SourceKey } from "./catalog";
 
 export type Json =
   | string
@@ -43,9 +48,16 @@ export type AlertItem = {
   id: string;
   event: string;
   severity: string;
+  urgency: string;
   headline: string;
   instruction: string;
+  area: string;
   ends: string | null;
+};
+
+export type AlertGeom = {
+  event: string;
+  geom: GeoGeom;
 };
 
 export type HourlyPt = {
@@ -73,6 +85,32 @@ export type MeteoNow = {
   pm25: number | null;
 };
 
+export type NwsHour = {
+  when: string;
+  temp: string;
+  wind: string;
+  forecast: string;
+  pop: number | null;
+};
+
+export type NwsDay = {
+  name: string;
+  high: string;
+  low: string;
+  short: string;
+  detail: string;
+  wind: string;
+  night: string;
+};
+
+export type NwsNow = {
+  temperature: string;
+  wind: string;
+  humidity: string;
+};
+
+export type RadarKind = "rainviewer" | "ncep-wms" | "none";
+
 export type WeatherBundle = {
   now: MeteoNow;
   hourly: HourlyPt[];
@@ -86,8 +124,21 @@ export type WeatherBundle = {
     code: number;
   }[];
   alerts: AlertItem[];
-  radar: { host: string; frames: { time: number; path: string }[]; satellite: { time: number; path: string }[] };
+  alertGeoms: AlertGeom[];
+  hoursNws: NwsHour[];
+  daysNws: NwsDay[];
+  hourlyNow: NwsNow | null;
+  radar: {
+    host: string;
+    frames: { time: number; path: string }[];
+    satellite: { time: number; path: string }[];
+    nowcastTimes: number[];
+    kind: RadarKind;
+  };
   fetched_at: number;
+  wxOk: boolean;
+  radarOk: boolean;
+  place?: { city: string; state: string };
 };
 
 export type RouteStep = {
@@ -99,12 +150,19 @@ export type RouteStep = {
   location: [number, number];
 };
 
+export type StormPathDetour = {
+  extraMin: number;
+  event: string;
+  hits: number;
+};
+
 export type RoutePlan = {
   distance_m: number;
   duration_s: number;
   geometry: [number, number][];
   steps: RouteStep[];
   gale: GaleReport;
+  stormPath: StormPathDetour | null;
 };
 
 export type SearchHit = {
@@ -112,6 +170,31 @@ export type SearchHit = {
   lat: number;
   lon: number;
   kind: string;
+  sub?: string;
+  rank?: number;
+  etaSec?: number;
+  meters?: number;
+};
+
+export type IntelItem = {
+  id: string;
+  type: string;
+  subtype: string | null;
+  label: string;
+  note: string;
+  color: string;
+  lat: number;
+  lon: number;
+  source: "gps" | "map";
+  ts: number;
+};
+
+export type SrcReport = {
+  id: string;
+  source: SourceKey;
+  title: string;
+  body: string;
+  when: string;
 };
 
 export type Prefs = UnitPrefs & {
@@ -130,4 +213,10 @@ export type Prefs = UnitPrefs & {
   theme: "system" | "dark" | "light";
   onboarded: boolean;
   tutorialDone: boolean;
+  gpsEnabled: boolean;
+  gpsAsked: boolean;
 };
+
+export type HudSheet = "none" | "dest" | "veh" | "intel" | "src";
+
+export type { ClockState, ConeState, GateMode };

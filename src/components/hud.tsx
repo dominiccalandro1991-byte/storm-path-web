@@ -1,15 +1,15 @@
-import { Compass, Layers, LocateFixed, Minus, Plus } from "lucide-react";
+import { Compass, Layers, Minus, Plus } from "lucide-react";
 import { useStorm } from "@/lib/store";
-import { cardinal } from "@/lib/engines/geo";
-import { cToTemp, hpaToPress, msToSpeed, pressSuffix, speedSuffix, tempSuffix } from "@/lib/engines/units";
-import { wmoLabel } from "@/lib/engines/wmo";
-import { bandLabel } from "@/lib/engines/gale";
+import { msToSpeed, speedSuffix } from "@/lib/engines/units";
+import { driveWindowCopy } from "@/lib/engines/clock";
 import type { MapStyle, OverlayId } from "@/lib/types";
-import { useEffect, useState } from "react";
+import { VehicleThumb } from "./sheets";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 const STYLES: { id: MapStyle; label: string }[] = [
-  { id: "dark", label: "Dark" },
-  { id: "default", label: "Default" },
+  { id: "default", label: "Streets" },
+  { id: "dark", label: "Night" },
   { id: "satellite", label: "Satellite" },
   { id: "terrain", label: "Terrain" },
 ];
@@ -22,192 +22,231 @@ const OVL: { id: OverlayId; label: string }[] = [
   { id: "aqi", label: "AQI" },
 ];
 
-export function TelemetryHud() {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+export function MapHud() {
   const gps = useStorm((s) => s.gps);
-  const gpsLost = useStorm((s) => s.gpsLost);
-  const gpsDenied = useStorm((s) => s.gpsDenied);
-  const offline = useStorm((s) => s.offline);
-  const weather = useStorm((s) => s.weather);
-  const overlays = useStorm((s) => s.overlays);
-  const prefs = useStorm((s) => s.prefs);
+  const dest = useStorm((s) => s.dest);
   const plan = useStorm((s) => s.plan);
-  const navigating = useStorm((s) => s.navigating);
-  const heading = gps?.heading ?? 0;
-  const speed = msToSpeed(gps?.speed_ms ?? 0, prefs.speed);
-  const alt = gps?.alt_m ?? null;
-
-  if (!mounted) {
-    return <div className="absolute top-3 left-3 z-10 h-28 w-56 rounded-md bg-surface/80 border border-border" />;
-  }
-
-  return (
-    <div className="absolute top-3 left-3 z-10 space-y-2 max-w-[min(100%-1.5rem,18rem)] pointer-events-none">
-      {gpsDenied && (
-        <div className="pointer-events-auto rounded-md bg-raised border border-border px-3 py-2 text-xs">
-          Manual mode — location denied. Search a place or drop a pin.
-        </div>
-      )}
-      {gpsLost && !gpsDenied && (
-        <div className="pointer-events-auto rounded-md bg-danger/15 border border-danger px-3 py-2 text-xs">
-          Searching for GPS…
-        </div>
-      )}
-      {offline && (
-        <div className="pointer-events-auto rounded-md bg-warn/15 border border-warn px-3 py-2 text-xs text-warn">
-          Offline mode
-        </div>
-      )}
-      <div className="rounded-md bg-surface/90 border border-border backdrop-blur-sm px-3 py-2 font-mono text-xs tabular">
-        <div className="flex gap-4">
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-muted">Spd</p>
-            <p className="text-lg text-primary leading-tight">
-              {speed.toFixed(0)}
-              <span className="text-[10px] text-muted ml-1">{speedSuffix(prefs.speed)}</span>
-            </p>
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-muted">Alt</p>
-            <p className="text-lg leading-tight">
-              {alt == null ? "—" : alt.toFixed(0)}
-              <span className="text-[10px] text-muted ml-1">m</span>
-            </p>
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-muted">Hdg</p>
-            <p className="text-lg leading-tight">
-              {String(Math.round(((heading % 360) + 360) % 360)).padStart(3, "0")}°
-              <span className="text-[10px] text-muted ml-1">{cardinal(heading)}</span>
-            </p>
-          </div>
-        </div>
-        <p className="mt-1 text-[10px] text-muted">
-          CEP {gps?.acc_m != null ? `${gps.acc_m.toFixed(0)} m` : "—"}
-          {weather
-            ? ` · ${hpaToPress(weather.now.pressure_hpa, prefs.pressure).toFixed(prefs.pressure === "inhg" ? 2 : 0)} ${pressSuffix(prefs.pressure)}`
-            : ""}
-          {overlays.includes("wind") && weather
-            ? ` · wind ${msToSpeed(weather.now.wind_ms, prefs.speed).toFixed(0)} ${speedSuffix(prefs.speed)}`
-            : ""}
-          {overlays.includes("aqi") && weather?.now.aqi != null ? ` · AQI ${weather.now.aqi}` : ""}
-          {overlays.includes("temp") && weather
-            ? ` · ${cToTemp(weather.now.temp_c, prefs.temp).toFixed(0)}${tempSuffix(prefs.temp)}`
-            : ""}
-        </p>
-      </div>
-      {weather && (
-        <div className="rounded-md bg-surface/90 border border-border px-3 py-2 text-xs">
-          <p className="text-[10px] uppercase tracking-widest text-muted">Sky</p>
-          <p className="text-sm">
-            {wmoLabel(weather.now.code).label} ·{" "}
-            {cToTemp(weather.now.temp_c, prefs.temp).toFixed(0)}
-            {tempSuffix(prefs.temp)}
-          </p>
-        </div>
-      )}
-      {navigating && plan && (
-        <div className="pointer-events-auto rounded-md bg-surface/95 border border-primary/40 px-3 py-2 text-xs space-y-1">
-          <p className="text-[10px] uppercase tracking-widest text-primary">Next</p>
-          <p className="text-sm font-medium">{plan.steps[0]?.instruction ?? "Continue"}</p>
-          <p className="text-muted">
-            {(plan.steps[0]?.distance_m / 1609.344).toFixed(1)} mi · ETA{" "}
-            {new Date(Date.now() + plan.duration_s * 1000).toLocaleTimeString([], {
-              hour: "numeric",
-              minute: "2-digit",
-            })}
-          </p>
-          <p className={plan.gale.reroute ? "text-danger" : "text-muted"}>
-            Gale {bandLabel(plan.gale.band)} · {(plan.gale.score * 100).toFixed(0)}
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-export function MapFabs() {
+  const prefs = useStorm((s) => s.prefs);
+  const weather = useStorm((s) => s.weather);
+  const radarLive = useStorm((s) => s.radarLive);
+  const stormPath = useStorm((s) => s.stormPath);
+  const cone = useStorm((s) => s.cone);
+  const clock = useStorm((s) => s.clock);
+  const remainSec = useStorm((s) => s.remainSec);
+  const gpsDenied = useStorm((s) => s.gpsDenied);
+  const locKind = useStorm((s) => s.locKind);
+  const alerts = weather?.alerts;
   const patch = useStorm((s) => s.patch);
   const follow = useStorm((s) => s.follow);
   const style = useStorm((s) => s.style);
   const overlays = useStorm((s) => s.overlays);
   const toggle = useStorm((s) => s.toggleOverlay);
+  const radarIdx = useStorm((s) => s.radarIdx);
   const [open, setOpen] = useState(false);
+  const mph = msToSpeed(gps?.speed_ms ?? 0, prefs.speed);
+  const step = plan?.steps.find((s) => s.distance_m > 40) ?? plan?.steps[0];
+  const radarAt = weather?.radar.frames[Math.max(0, Math.min((weather.radar.frames.length || 1) - 1, radarIdx))]?.time
+    ?? weather?.radar.frames[weather.radar.frames.length - 1]?.time;
+  const win = driveWindowCopy(clock, !!dest, remainSec);
+  const alert0 = alerts?.[0];
+  const showClock = clock.slots.length > 0 || clock.risk === "IMPACT";
+  const showPath = !!(stormPath || cone.risk === "INTERSECT");
 
   return (
-    <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-2">
-      <button
-        type="button"
-        className="size-11 rounded-md bg-surface border border-border grid place-items-center text-primary"
-        aria-label="Recenter"
-        onClick={() => patch({ follow: true })}
-      >
-        <LocateFixed className="size-4" strokeWidth={1.75} />
-      </button>
-      <button
-        type="button"
-        className="size-11 rounded-md bg-surface border border-border grid place-items-center"
-        aria-label="Zoom in"
-        onClick={() => window.dispatchEvent(new CustomEvent("storm-zoom", { detail: 1 }))}
-      >
-        <Plus className="size-4" strokeWidth={1.75} />
-      </button>
-      <button
-        type="button"
-        className="size-11 rounded-md bg-surface border border-border grid place-items-center"
-        aria-label="Zoom out"
-        onClick={() => window.dispatchEvent(new CustomEvent("storm-zoom", { detail: -1 }))}
-      >
-        <Minus className="size-4" strokeWidth={1.75} />
-      </button>
-      <button
-        type="button"
-        className="size-11 rounded-md bg-surface border border-border grid place-items-center"
-        aria-label="Compass north-up"
-        onClick={() => {
-          const p = useStorm.getState().prefs;
-          useStorm.getState().setPrefs({ northUp: !p.northUp });
-        }}
-      >
-        <Compass className="size-4" strokeWidth={1.75} />
-      </button>
-      <button
-        type="button"
-        className="size-11 rounded-md bg-surface border border-border grid place-items-center"
-        aria-label="Layers"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <Layers className="size-4" strokeWidth={1.75} />
-      </button>
-      {open && (
-        <div className="w-44 rounded-md bg-surface border border-border p-2 space-y-2 text-xs">
-          <p className="text-[10px] uppercase tracking-widest text-muted">Style</p>
-          {STYLES.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className={`block w-full text-left min-h-9 px-2 rounded-sm ${style === s.id ? "bg-raised text-primary" : "hover:bg-raised"}`}
-              onClick={() => patch({ style: s.id })}
-            >
-              {s.label}
-            </button>
-          ))}
-          <p className="text-[10px] uppercase tracking-widest text-muted pt-1">Overlays</p>
-          {OVL.map((o) => (
-            <label key={o.id} className="flex items-center gap-2 min-h-9 px-2">
-              <input
-                type="checkbox"
-                className="size-4 accent-primary"
-                checked={overlays.includes(o.id)}
-                onChange={() => toggle(o.id)}
-              />
-              {o.label}
-            </label>
-          ))}
-          {!follow && <p className="text-muted px-2">Map free-look</p>}
+    <>
+      {alert0 && (
+        <div className="absolute top-2 left-2 right-2 z-30 bg-danger/90 text-fg px-3 py-2 text-hud">
+          <b className="mr-2 tracking-widest">NWS {alert0.severity}</b>
+          {alert0.event}
         </div>
       )}
-    </div>
+
+      <div
+        className={cn(
+          "absolute left-2 z-20 max-w-64 pointer-events-none font-mono text-micro tracking-wider bg-surface/90 border border-border px-2 py-1 text-primary",
+          alert0 ? "top-14" : "top-2",
+        )}
+      >
+        {radarAt
+          ? `RADAR ${new Date(radarAt * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · NEXRAD`
+          : weather?.radar.kind === "ncep-wms"
+            ? "RADAR · NOAA WMS"
+            : radarLive
+              ? "RADAR LIVE"
+              : "RADAR CONNECTING"}
+        <span
+          className="mt-1 block h-1.5 w-40 rounded-full"
+          style={{
+            background:
+              "linear-gradient(90deg,#9be38a,#3cb43c,#f8f060,#f0a020,#e03820,#c01880,#f0f0f0)",
+          }}
+        />
+      </div>
+
+      {gpsDenied && !gps && (
+        <div
+          className={cn(
+            "absolute left-2 z-20 bg-surface/95 border border-warn px-2 py-1 font-mono text-micro tracking-wide text-warn",
+            alert0 ? "top-24" : "top-12",
+          )}
+        >
+          LOCATION OFF · SETTINGS
+        </div>
+      )}
+
+      <div
+        className={cn(
+          "absolute right-2.5 z-20 flex flex-col gap-1.5",
+          alert0 ? "top-14" : "top-2",
+        )}
+      >
+        <button
+          type="button"
+          className="size-9 border border-primary bg-surface/95 text-primary grid place-items-center"
+          aria-label="Zoom in"
+          onClick={() => window.dispatchEvent(new CustomEvent("storm-zoom", { detail: 1 }))}
+        >
+          <Plus className="size-4" />
+        </button>
+        <button
+          type="button"
+          className="size-9 border border-primary bg-surface/95 text-primary grid place-items-center"
+          aria-label="Zoom out"
+          onClick={() => window.dispatchEvent(new CustomEvent("storm-zoom", { detail: -1 }))}
+        >
+          <Minus className="size-4" />
+        </button>
+        {!follow && (
+          <button
+            type="button"
+            className="min-h-9 px-1 border border-primary bg-surface/95 text-primary text-micro tracking-wide"
+            onClick={() => patch({ follow: true })}
+          >
+            RECENTER
+          </button>
+        )}
+        <button
+          type="button"
+          className="size-9 border border-border bg-surface/95 grid place-items-center"
+          aria-label="Compass"
+          onClick={() => useStorm.getState().setPrefs({ northUp: !prefs.northUp })}
+        >
+          <Compass className="size-4" strokeWidth={1.75} />
+        </button>
+        <button
+          type="button"
+          className="size-9 border border-border bg-surface/95 grid place-items-center"
+          aria-label="Layers"
+          onClick={() => setOpen((v) => !v)}
+        >
+          <Layers className="size-4" strokeWidth={1.75} />
+        </button>
+        {open && (
+          <div className="w-40 bg-surface border border-border p-2 space-y-1 text-xs">
+            {STYLES.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className={cn(
+                  "block w-full text-left min-h-8 px-2",
+                  style === s.id ? "bg-raised text-primary" : "hover:bg-raised",
+                )}
+                onClick={() => patch({ style: s.id })}
+              >
+                {s.label}
+              </button>
+            ))}
+            {OVL.map((o) => (
+              <label key={o.id} className="flex items-center gap-2 min-h-8 px-2">
+                <input
+                  type="checkbox"
+                  className="size-3.5 accent-primary"
+                  checked={overlays.includes(o.id)}
+                  onChange={() => toggle(o.id)}
+                />
+                {o.label}
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {showPath && (
+        <div className="absolute left-2 right-2 bottom-hud-stack z-20 bg-raised/95 border border-primary px-3 py-2 text-hud">
+          {stormPath ? (
+            <>
+              <b className="block tracking-widest text-primary text-micro">STORM PATH</b>
+              Verified detour · +{stormPath.extraMin} min · avoids {stormPath.event}
+            </>
+          ) : (
+            <>
+              <b className="block tracking-widest text-danger text-micro">INTERSECT CONE</b>
+              {cone.copy}
+            </>
+          )}
+        </div>
+      )}
+
+      {showClock && (
+        <div
+          className={cn(
+            "absolute left-2 right-hud-side z-20 bg-surface/95 border px-3 py-1.5 font-mono text-micro tracking-wide pointer-events-none",
+            clock.risk === "IMPACT" ? "border-danger text-danger" : "border-warn text-warn",
+            showPath ? "bottom-hud-under" : "bottom-hud-stack",
+          )}
+        >
+          {clock.risk} · {win}
+        </div>
+      )}
+
+      <div className="absolute left-2 right-hud-side bottom-hud-dock z-20 bg-surface/95 border border-warn border-l-4 px-3 py-2 pointer-events-none">
+        <p className="font-mono text-warn font-medium">
+          {step
+            ? `${(step.distance_m / 1609.34).toFixed(1)} mi`
+            : plan
+              ? `${(plan.distance_m / 1609.34).toFixed(1)} mi`
+              : gps
+                ? "LIVE"
+                : locKind === "approx"
+                  ? "MAP"
+                  : "MAP"}
+        </p>
+        <p className="text-sm">{step?.instruction ?? (dest ? "Head toward destination" : "Set a destination")}</p>
+        <p className="text-hud text-muted">{dest?.name ?? "SEARCH TO NAVIGATE"}</p>
+      </div>
+
+      <div className="absolute right-2.5 bottom-hud-dock z-20 size-speedo rounded-full border-2 border-primary bg-surface/95 grid place-items-center pointer-events-none">
+        <div className="text-center leading-none">
+          <b className="font-mono text-xl tabular">{gps ? mph.toFixed(0) : "--"}</b>
+          <span className="block text-micro tracking-widest text-primary">{speedSuffix(prefs.speed).toUpperCase()}</span>
+        </div>
+      </div>
+
+      <div className="absolute left-2.5 right-2.5 bottom-2.5 z-20 flex gap-2">
+        <button
+          type="button"
+          className="flex-1 min-h-12 bg-surface/95 border border-primary px-3 text-left hud-clip-wide"
+          onClick={() => patch({ sheet: "dest" })}
+        >
+          <small className="block text-micro tracking-widest text-primary font-medium">SET DESTINATION</small>
+          <span className="text-sm">{dest?.name ?? "Town, state, or address"}</span>
+        </button>
+        <button
+          type="button"
+          className="w-dock min-h-12 bg-surface/95 border border-primary text-micro tracking-wide text-primary flex flex-col items-center justify-center gap-0.5"
+          onClick={() => patch({ sheet: "veh", vehPack: null })}
+        >
+          <VehicleThumb />
+          MARKER
+        </button>
+        <button
+          type="button"
+          className="w-dock min-h-12 bg-surface/95 border border-warn text-micro tracking-wide text-warn"
+          onClick={() => patch({ sheet: "intel" })}
+        >
+          REPORT
+        </button>
+      </div>
+    </>
   );
 }

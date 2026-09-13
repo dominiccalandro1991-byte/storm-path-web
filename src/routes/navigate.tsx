@@ -41,9 +41,10 @@ function Page() {
           from: { lat: from.lat, lon: from.lon },
           to: { lat: dest.lat, lon: dest.lon },
           avoidHighways: prefs.avoidHighways,
+          geoms: useStorm.getState().alertGeoms,
         },
       });
-      patch({ plan: r });
+      patch({ plan: r, remainSec: Math.round(r.duration_s), stormPath: r.stormPath, navigating: true });
       if (r.gale.reroute) ping("Gale Vector recommends a delay or alternate.");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Cannot calculate route.");

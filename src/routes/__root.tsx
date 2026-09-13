@@ -21,9 +21,10 @@ export const Route = createRootRoute({
       { title: APP_NAME },
       {
         name: "description",
-        content: "Weather-aware navigation. Radar, infrared satellite, Gale Vector routing, live telemetry.",
+        content:
+          "Storm Path Web — street map, live NEXRAD radar, 48-hour and 7-day NWS, Storm Clock, Intersect Cone, state DOT reports, on-device voice.",
       },
-      { name: "theme-color", content: "#071018" },
+      { name: "theme-color", content: "#020408" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },

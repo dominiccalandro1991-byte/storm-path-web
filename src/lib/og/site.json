@@ -1,7 +1,7 @@
 {
   "title": "STORM PATH",
+  "type": "x:game",
   "card": "custom",
-  "color": "3DD6FF",
-  "description": "Weather-aware navigation.",
-  "type": "x:game"
+  "color": "00E5FF",
+  "description": "Weather-aware navigation. Live GPS, NEXRAD, Intersect Cone."
 }

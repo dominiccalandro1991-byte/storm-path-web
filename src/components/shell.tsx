@@ -1,35 +1,57 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
-  Bookmark,
   CloudLightning,
+  Gauge,
   Map as MapIcon,
-  Navigation2,
   Settings,
 } from "lucide-react";
-import { UserButton } from "@/lib/auth/gates";
-import { useCurrentUser, useCurrentUserState } from "@/lib/auth/use-current-user";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { cn } from "@/lib/utils";
 import { StormMark } from "./mark";
 import { useStorm } from "@/lib/store";
 import { loadCloud } from "@/lib/server/places";
-import { useEffect, type ReactNode } from "react";
+import { useAtmosphere } from "@/hooks/use-atmosphere";
+import { useGps } from "@/hooks/use-gps";
+import { DestSheet, IntelSheet, SourceRail, VehicleSheet } from "./sheets";
+import { LocationAsk } from "./location-ask";
+import { useEffect, useState, type ReactNode } from "react";
 
 const NAV = [
+  { to: "/driver", label: "Driver", icon: Gauge },
   { to: "/", label: "Map", icon: MapIcon },
   { to: "/weather", label: "Weather", icon: CloudLightning },
-  { to: "/navigate", label: "Navigate", icon: Navigation2 },
-  { to: "/saved", label: "Saved", icon: Bookmark },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ children, map }: { children: ReactNode; map?: boolean }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
-  const { isPending } = useCurrentUserState();
   const user = useCurrentUser();
-  const alerts = useStorm((s) => s.weather?.alerts.length ?? 0);
   const toast = useStorm((s) => s.toast);
   const patch = useStorm((s) => s.patch);
   const setPrefs = useStorm((s) => s.setPrefs);
+  const gps = useStorm((s) => s.gps);
+  const wxLive = useStorm((s) => s.wxLive);
+  const radarLive = useStorm((s) => s.radarLive);
+  const voice = useStorm((s) => s.prefs.voice);
+  const locKind = useStorm((s) => s.locKind);
+  const placeLabel = useStorm((s) => s.placeLabel);
+  const dotName = useStorm((s) => s.dotName);
+  const gpsDenied = useStorm((s) => s.gpsDenied);
+  const alerts = useStorm((s) => s.weather?.alerts);
+  const [clock, setClock] = useState("--:--:--");
+
+  useGps();
+  useAtmosphere();
+
+  useEffect(() => {
+    void useStorm.persist.rehydrate();
+  }, []);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setClock(new Date().toLocaleTimeString()), 1000);
+    setClock(new Date().toLocaleTimeString());
+    return () => window.clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -63,19 +85,23 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, [patch]);
 
+  const live = wxLive && radarLive;
+  const ticker = alerts?.[0]
+    ? alerts.map((a) => a.event).join(" · ")
+    : wxLive
+      ? `NO ACTIVE NWS ALERTS · ${placeLabel}`
+      : "NWS CONNECTING";
+  const gpsLabel = gps ? "GPS LIVE" : gpsDenied ? "GPS OFF" : locKind === "approx" ? "APPROX" : "GPS WAIT";
+
   return (
-    <div className="min-h-dvh bg-bg text-fg flex flex-col md:flex-row">
-      <aside className="hidden md:flex w-56 shrink-0 flex-col border-r border-border bg-surface">
-        <div className="px-5 py-5 border-b border-border">
-          <div className="flex items-center gap-2">
-            <StormMark />
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.22em] text-muted">Storm</p>
-              <p className="font-medium leading-tight">PATH</p>
-            </div>
-          </div>
+    <div className="h-dvh bg-bg text-fg flex flex-col overflow-hidden">
+      <header className="shrink-0 bg-surface border-b border-border px-3 pt-[max(6px,env(safe-area-inset-top))] pb-2">
+        <div className="flex items-center gap-2">
+          <StormMark className="size-6" />
+          <p className="font-mono text-hud font-medium tracking-[0.28em] text-primary brand-glow">STORMPATH</p>
+          <span className="ml-auto font-mono text-xs tabular text-primary">{clock}</span>
         </div>
-        <nav className="flex-1 p-3 flex flex-col gap-1">
+        <nav className="flex gap-1.5 mt-2">
           {NAV.map((n) => {
             const Icon = n.icon;
             const active = path === n.to;
@@ -84,84 +110,67 @@ export function AppShell({ children }: { children: ReactNode }) {
                 key={n.to}
                 to={n.to}
                 className={cn(
-                  "flex items-center gap-3 min-h-11 px-3 rounded-sm text-sm",
+                  "flex-1 min-h-10 inline-flex items-center justify-center gap-2 text-micro uppercase tracking-[0.16em] border hud-clip font-medium",
                   active
-                    ? "bg-raised text-primary"
-                    : "text-muted hover:text-fg hover:bg-raised/60",
+                    ? "text-primary border-primary bg-primary/10"
+                    : "text-muted border-border hover:text-fg",
                 )}
               >
-                <span className="relative">
-                  <Icon className="size-4" strokeWidth={1.75} />
-                  {n.to === "/weather" && alerts > 0 && (
-                    <span className="absolute -top-1 -right-2 min-w-4 h-4 px-0.5 rounded-full bg-danger text-[9px] text-fg grid place-items-center">
-                      {alerts}
-                    </span>
-                  )}
-                </span>
+                <Icon className="size-3.5" strokeWidth={1.75} />
                 {n.label}
               </Link>
             );
           })}
         </nav>
-        <div className="p-4 border-t border-border text-xs">
-          {isPending ? (
-            <div className="h-8 w-full animate-pulse rounded-sm bg-raised" />
-          ) : user ? (
-            <UserButton />
-          ) : (
-            <Link to="/login" className="text-primary hover:underline">
-              Sign in
-            </Link>
-          )}
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          <Badge live={!!gps} off={gpsDenied && !gps}>
+            {gpsLabel}
+          </Badge>
+          <Badge live={radarLive}>{radarLive ? "RADAR LIVE" : "RADAR WAIT"}</Badge>
+          <Badge live={wxLive}>{wxLive ? "NWS LIVE" : "NWS WAIT"}</Badge>
+          <Badge live={!!dotName}>
+            {dotName || "DOT"}
+          </Badge>
+          <Badge live={voice} off={!voice}>
+            {voice ? "VOICE ON" : "VOICE OFF"}
+          </Badge>
+          <Badge live={live}>{live ? "FEEDS LIVE" : "CONNECTING"}</Badge>
         </div>
-      </aside>
+      </header>
 
-      <div className="flex-1 flex flex-col min-w-0 min-h-0">
-        <header className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border bg-surface md:hidden">
-          <div className="flex items-center gap-2">
-            <StormMark className="size-7" />
-            <span className="font-medium">STORM PATH</span>
-          </div>
-          {alerts > 0 && (
-            <span className="text-[10px] uppercase tracking-widest text-danger">
-              {alerts} alert{alerts === 1 ? "" : "s"}
-            </span>
-          )}
-        </header>
-        <main className="flex-1 min-h-0 pb-20 md:pb-0 relative">{children}</main>
-        <nav className="md:hidden fixed bottom-0 inset-x-0 z-20 border-t border-border bg-surface/95 backdrop-blur-sm">
-          <div className="grid grid-cols-5">
-            {NAV.map((n) => {
-              const Icon = n.icon;
-              const active = path === n.to;
-              return (
-                <Link
-                  key={n.to}
-                  to={n.to}
-                  className={cn(
-                    "flex flex-col items-center justify-center min-h-16 gap-1 text-[10px] uppercase tracking-wider",
-                    active ? "text-primary" : "text-muted",
-                  )}
-                >
-                  <span className="relative">
-                    <Icon className="size-4" strokeWidth={1.75} />
-                    {n.to === "/weather" && alerts > 0 && (
-                      <span className="absolute -top-1 -right-2 size-2 rounded-full bg-danger" />
-                    )}
-                  </span>
-                  {n.label}
-                </Link>
-              );
-            })}
-          </div>
-        </nav>
+      <div className="flex-1 min-h-0 relative flex">
+        <main className={cn("flex-1 min-w-0 min-h-0 relative", map ? "overflow-hidden" : "overflow-auto")}>
+          {children}
+          <LocationAsk />
+          <DestSheet />
+          <VehicleSheet />
+          <IntelSheet />
+          <SourceRail />
+        </main>
       </div>
 
+      <footer className="shrink-0 bg-surface border-t border-border px-3 py-1.5 pb-[max(8px,env(safe-area-inset-bottom))] font-mono text-[10px] text-muted tracking-wide truncate">
+        {ticker}
+      </footer>
+
       {toast && (
-        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-40 rounded-md bg-raised border border-border px-4 py-2 text-sm shadow-lg">
+        <div className="fixed left-4 right-16 top-28 z-50 border border-primary bg-raised px-3 py-2 text-center text-xs tracking-wide text-primary">
           {toast}
         </div>
       )}
     </div>
+  );
+}
+
+function Badge({ live, off, children }: { live?: boolean; off?: boolean; children: ReactNode }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center min-h-7 px-2 border font-mono text-[10px] tracking-wide",
+        off ? "border-muted text-muted" : live ? "border-ok text-ok" : "border-warn text-warn",
+      )}
+    >
+      {children}
+    </span>
   );
 }

@@ -23,13 +23,13 @@ export const DEFAULT_UNITS: UnitPrefs = {
 export function kToTemp(k: number, u: TempUnit): number {
   if (u === "K") return k;
   const c = k - 273.15;
-  return u === "C" ? c : c * 9 / 5 + 32;
+  return u === "C" ? c : (c * 9) / 5 + 32;
 }
 
 export function cToTemp(c: number, u: TempUnit): number {
   if (u === "C") return c;
   if (u === "K") return c + 273.15;
-  return c * 9 / 5 + 32;
+  return (c * 9) / 5 + 32;
 }
 
 export function mToDist(m: number, u: DistUnit): number {
@@ -83,4 +83,22 @@ export function fmtClock(isoStamp: string): string {
   const d = new Date(isoStamp);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+export function formatDuration(sec: number | null | undefined): string {
+  if (sec == null || !Number.isFinite(sec) || sec < 0) return "";
+  const s = Math.round(sec);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const r = s % 60;
+  if (d) return `${d}d ${h}h ${m}m`;
+  if (h) return `${h}h ${m}m ${r}s`;
+  if (m) return `${m} min ${r}s`;
+  return `${r}s`;
+}
+
+export function etaCells(sec: number | null | undefined): [number, number, number, number] {
+  const s = Math.max(0, Math.round(sec || 0));
+  return [Math.floor(s / 86400), Math.floor((s % 86400) / 3600), Math.floor((s % 3600) / 60), s % 60];
 }

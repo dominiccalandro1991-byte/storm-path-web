@@ -6,7 +6,9 @@ import { useStorm } from "@/lib/store";
 import { savePrefsCloud } from "@/lib/server/places";
 import { Button } from "@/components/ui/button";
 import { fmtCoord } from "@/lib/engines/units";
-import type { CoordFmt, DistUnit, PressUnit, SpeedUnit, TempUnit } from "@/lib/engines/units";
+import { speak, cancelVoice } from "@/lib/voice";
+import { requestGps } from "@/hooks/use-gps";
+import type { CoordFmt, DistUnit, PressUnit, TempUnit } from "@/lib/engines/units";
 import { useEffect, useState, type ReactNode } from "react";
 
 export const Route = createFileRoute("/settings")({ component: Page });
@@ -16,11 +18,15 @@ function Page() {
   const { isPending } = useCurrentUserState();
   const prefs = useStorm((s) => s.prefs);
   const setPrefs = useStorm((s) => s.setPrefs);
-  const places = useStorm((s) => s.places);
-  const routes = useStorm((s) => s.routes);
   const gps = useStorm((s) => s.gps);
   const gpsDenied = useStorm((s) => s.gpsDenied);
+  const wxLive = useStorm((s) => s.wxLive);
+  const radarLive = useStorm((s) => s.radarLive);
+  const locKind = useStorm((s) => s.locKind);
+  const placeLabel = useStorm((s) => s.placeLabel);
+  const dotName = useStorm((s) => s.dotName);
   const ping = useStorm((s) => s.ping);
+  const patch = useStorm((s) => s.patch);
   const [perm, setPerm] = useState("unknown");
 
   useEffect(() => {
@@ -28,65 +34,75 @@ function Page() {
       ?.query({ name: "geolocation" as PermissionName })
       .then((p) => setPerm(p.state))
       .catch(() => setPerm("unknown"));
-  }, []);
+  }, [gps, gpsDenied]);
 
   function persist() {
     if (user) void savePrefsCloud({ data: { prefs } }).catch(() => undefined);
     ping("Preferences stored");
   }
 
-  function exportData() {
-    const blob = new Blob(
-      [JSON.stringify({ places, routes, prefs, exported_at: new Date().toISOString() }, null, 2)],
-      { type: "application/json" },
-    );
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "storm-path-export.json";
-    a.click();
-  }
-
-  const miles = places.length; // explorer proxy
-  const dist = routes.reduce((s, r) => s + r.distance_m, 0);
-
   return (
     <AppShell>
-      <div className="p-4 md:p-6 max-w-xl mx-auto space-y-6">
-        <header>
-          <p className="text-[11px] uppercase tracking-[0.22em] text-muted">Operator</p>
-          <h1 className="text-2xl font-medium">Settings</h1>
-        </header>
+      <div className="p-4 md:p-6 max-w-xl mx-auto space-y-5 pb-8">
+        <p className="text-[11px] uppercase tracking-[0.22em] text-primary">Settings</p>
+        <h1 className="text-3xl font-medium">Operator</h1>
 
-        <section className="rounded-lg bg-surface border border-border p-4 space-y-2">
-          <h2 className="text-sm uppercase tracking-widest text-muted">Identity</h2>
-          {isPending ? (
-            <div className="h-8 w-40 animate-pulse rounded-sm bg-raised" />
-          ) : user ? (
-            <>
-              <p className="text-sm">{user.displayName ?? "Operator"}</p>
-              <UserButton />
-            </>
-          ) : (
-            <p className="text-sm">
-              Guest mode.{" "}
-              <Link to="/login" className="text-primary hover:underline">
-                Sign in
-              </Link>{" "}
-              to sync Home / Work / routes.
-            </p>
-          )}
+        <section className="rounded-lg bg-card border border-border p-4 space-y-3">
+          <Row
+            title="Device GPS"
+            copy="Asked once at the start, like Maps. Turn it off any time. Radar and NWS keep running."
+            action={
+              <button
+                type="button"
+                className={`min-h-10 px-3 border text-xs tracking-wide ${prefs.gpsEnabled ? "border-ok text-ok" : "border-border text-muted"}`}
+                onClick={() => {
+                  const next = !prefs.gpsEnabled;
+                  setPrefs({ gpsEnabled: next, gpsAsked: true });
+                  if (next) requestGps();
+                  else patch({ gps: null, locKind: locKind === "gps" ? "manual" : locKind });
+                  ping(next ? "LOCATION ON" : "LOCATION OFF");
+                }}
+              >
+                {prefs.gpsEnabled ? "ON" : "OFF"}
+              </button>
+            }
+          />
+          <p className="text-xs text-muted font-mono">
+            {gps
+              ? `LIVE · ${fmtCoord(gps.lat, gps.lon, prefs.coords)}`
+              : gpsDenied
+                ? `BLOCKED · ${placeLabel}`
+                : `${locKind.toUpperCase()} · ${placeLabel}`}
+            {dotName ? ` · ${dotName}` : ""}
+          </p>
         </section>
 
-        <section className="rounded-lg bg-surface border border-border p-4 space-y-3">
-          <h2 className="text-sm uppercase tracking-widest text-muted">Units</h2>
+        <section className="rounded-lg bg-card border border-border p-4">
+          <p className="font-medium">Feeds</p>
+          <p className="text-sm text-muted font-mono mt-1">
+            GPS={String(!!gps)} NWS={String(wxLive)} RADAR={String(radarLive)} {dotName}
+          </p>
+        </section>
+
+        <section className="rounded-lg bg-card border border-border p-4 space-y-3">
+          <Row
+            title="Speed units"
+            copy="Live GPS speed from this device"
+            action={
+              <button
+                type="button"
+                className="min-h-10 px-3 border border-border text-xs tracking-wide"
+                onClick={() => setPrefs({ speed: prefs.speed === "mph" ? "kmh" : "mph" })}
+              >
+                {prefs.speed === "mph" ? "MPH" : "KMH"}
+              </button>
+            }
+          />
           <Field label="Temperature">
             <Sel value={prefs.temp} onChange={(v) => setPrefs({ temp: v as TempUnit })} opts={["F", "C", "K"]} />
           </Field>
           <Field label="Distance">
             <Sel value={prefs.distance} onChange={(v) => setPrefs({ distance: v as DistUnit })} opts={["mi", "km", "nm"]} />
-          </Field>
-          <Field label="Speed">
-            <Sel value={prefs.speed} onChange={(v) => setPrefs({ speed: v as SpeedUnit })} opts={["mph", "kmh", "kt", "ms"]} />
           </Field>
           <Field label="Pressure">
             <Sel value={prefs.pressure} onChange={(v) => setPrefs({ pressure: v as PressUnit })} opts={["inhg", "hpa", "mbar"]} />
@@ -96,49 +112,124 @@ function Page() {
           </Field>
         </section>
 
-        <section className="rounded-lg bg-surface border border-border p-4 space-y-2">
-          <h2 className="text-sm uppercase tracking-widest text-muted">Map & alerts</h2>
+        <section className="rounded-lg bg-card border border-border p-4 space-y-2">
+          <Row
+            title="Map tiles"
+            copy="OpenStreetMap streets with names. Night, satellite, and terrain from the map layers control."
+            action={<span className="text-xs tracking-wide text-muted">OSM</span>}
+          />
+          <Row
+            title="Voice nav"
+            copy="Turn-by-turn at full volume. On-device Web Speech API — nothing is uploaded."
+            action={
+              <button
+                type="button"
+                className={`min-h-10 px-3 border text-xs tracking-wide ${prefs.voice ? "border-ok text-ok" : "border-border text-muted"}`}
+                onClick={() => {
+                  const next = !prefs.voice;
+                  setPrefs({ voice: next });
+                  if (next) speak("Voice navigation on.", true, true);
+                  else cancelVoice();
+                }}
+              >
+                {prefs.voice ? "ON" : "OFF"}
+              </button>
+            }
+          />
           <Toggle label="Keep map north-up" checked={prefs.northUp} onChange={(v) => setPrefs({ northUp: v })} />
-          <Toggle label="Show scale bar" checked={prefs.scaleBar} onChange={(v) => setPrefs({ scaleBar: v })} />
           <Toggle label="Severe weather alerts" checked={prefs.alertSevere} onChange={(v) => setPrefs({ alertSevere: v })} />
-          <Toggle label="Rain-start alerts" checked={prefs.alertRain} onChange={(v) => setPrefs({ alertRain: v })} />
-          <Toggle label="Navigation voice" checked={prefs.voice} onChange={(v) => setPrefs({ voice: v })} />
-          <Toggle label="Haptics" checked={prefs.haptics} onChange={(v) => setPrefs({ haptics: v })} />
           <Toggle label="Incognito navigation" checked={prefs.incognito} onChange={(v) => setPrefs({ incognito: v })} />
-          <Toggle label="Share anonymous telemetry" checked={prefs.analytics} onChange={(v) => setPrefs({ analytics: v })} />
-          <Toggle label="Scenic preference" checked={prefs.scenic} onChange={(v) => setPrefs({ scenic: v })} />
-          <Button onClick={persist}>Save prefs</Button>
-        </section>
-
-        <section className="rounded-lg bg-surface border border-border p-4 space-y-2 text-sm">
-          <h2 className="text-sm uppercase tracking-widest text-muted">Permissions</h2>
-          <p>Location: {gpsDenied ? "denied" : perm}{gps ? ` · ${fmtCoord(gps.lat, gps.lon, prefs.coords)}` : ""}</p>
-          <p className="text-xs text-muted">Motion / barometer / always-on background geofence require the native app.</p>
-        </section>
-
-        <section className="rounded-lg bg-surface border border-border p-4 space-y-2 text-sm">
-          <h2 className="text-sm uppercase tracking-widest text-muted">Explorer</h2>
-          <p className="font-mono tabular">PLACES {miles}</p>
-          <p className="font-mono tabular">ROUTE M {dist.toFixed(0)}</p>
-          <Button variant="ghost" onClick={exportData}>Export JSON</Button>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              useStorm.getState().patch({
-                places: useStorm.getState().places.filter((p) => p.kind !== "recent"),
-              });
-              ping("Location history cleared");
-            }}
-          >
-            Clear location history
+          <Button variant="quiet" onClick={persist}>
+            Save prefs
           </Button>
         </section>
 
-        <p className="text-xs text-muted">
-          Neon only. No Stripe. No heal. Two repositories: web and native app. Billing / IAP live nowhere in this client.
+        <section className="rounded-lg bg-card border border-border p-4 space-y-2 text-sm">
+          <p className="font-medium">Storm Path Web</p>
+          <p className="text-muted">
+            Street map with live NEXRAD radar, isolated 48-hour and 7-day NWS, Storm Clock, OSRM
+            routing, Intersect Cone, and state DOT reports that follow the map (IDOT, MoDOT, TxDOT,
+            and every other state agency). Location is optional and toggled here.
+          </p>
+        </section>
+
+        <section className="rounded-lg bg-card border border-border p-4">
+          <Row
+            title="Driver intel"
+            copy="Remove pins stored on this device (3-hour TTL)"
+            action={
+              <button
+                type="button"
+                className="min-h-10 px-3 border border-border text-xs tracking-wide"
+                onClick={() => {
+                  patch({ intel: [] });
+                  ping("INTEL CLEARED");
+                }}
+              >
+                CLEAR
+              </button>
+            }
+          />
+        </section>
+
+        <section className="rounded-lg bg-card border border-border p-4 space-y-2 text-sm">
+          <p className="text-[11px] uppercase tracking-widest text-muted">Identity</p>
+          {isPending ? (
+            <div className="h-8 w-40 animate-pulse rounded-sm bg-raised" />
+          ) : user ? (
+            <>
+              <p>{user.displayName ?? "Operator"}</p>
+              <UserButton />
+            </>
+          ) : (
+            <p>
+              Guest mode.{" "}
+              <Link to="/login" className="text-primary hover:underline">
+                Sign in
+              </Link>{" "}
+              to sync Home / Work / routes.
+            </p>
+          )}
+        </section>
+
+        <section className="rounded-lg bg-card border border-border p-4 text-sm space-y-1">
+          <p className="text-[11px] uppercase tracking-widest text-muted">Permissions</p>
+          <p>
+            Location: {gpsDenied ? "denied" : perm}
+            {gps ? ` · ${fmtCoord(gps.lat, gps.lon, prefs.coords)}` : ""}
+          </p>
+          <p className="text-xs text-muted">
+            Motion / barometer / always-on background geofence require the native app.
+          </p>
+        </section>
+
+        <p className="text-sm">
+          <Link to="/privacy" className="text-primary hover:underline">
+            Privacy policy
+          </Link>
+          {" · "}
+          <Link to="/saved" className="text-primary hover:underline">
+            Places
+          </Link>
+          {" · "}
+          <Link to="/navigate" className="text-primary hover:underline">
+            Gale route
+          </Link>
         </p>
       </div>
     </AppShell>
+  );
+}
+
+function Row({ title, copy, action }: { title: string; copy: string; action: ReactNode }) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="flex-1 min-w-0">
+        <p className="font-medium text-sm">{title}</p>
+        <p className="text-xs text-muted">{copy}</p>
+      </div>
+      {action}
+    </div>
   );
 }
 

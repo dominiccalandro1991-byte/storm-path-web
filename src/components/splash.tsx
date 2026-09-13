@@ -14,7 +14,7 @@ export function Splash({ progress }: { progress: number }) {
         <StormMark className="size-14" />
         <p className="text-[11px] uppercase tracking-[0.28em] text-muted">Voltcore</p>
         <h1 className="text-3xl font-medium tracking-tight">STORM PATH</h1>
-        <p className="text-sm text-muted">Weather-aware navigation</p>
+        <p className="text-sm text-muted">Live GPS · NEXRAD · Intersect Cone</p>
         <div className="mt-4 h-1 w-48 overflow-hidden rounded-full bg-raised">
           <div
             className="h-full bg-primary transition-[width] duration-200"

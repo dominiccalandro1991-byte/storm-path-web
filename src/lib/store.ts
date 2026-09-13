@@ -2,13 +2,25 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { ORIGIN } from "./engines/constants";
 import { DEFAULT_UNITS } from "./engines/units";
+import { INTEL_TTL_MS, type SourceKey } from "./catalog";
+import type { ClockState } from "./engines/clock";
+import type { ConeState } from "./engines/cone";
+import type { GateMode } from "./engines/and-gate";
 import type {
+  AlertGeom,
+  HudSheet,
+  IntelItem,
   MapStyle,
+  NwsDay,
+  NwsHour,
+  NwsNow,
   OverlayId,
   Place,
   Prefs,
   RoutePlan,
   SavedRoute,
+  SrcReport,
+  StormPathDetour,
   WeatherBundle,
 } from "./types";
 
@@ -31,13 +43,38 @@ type StormState = {
   gps: GpsFix | null;
   gpsDenied: boolean;
   gpsLost: boolean;
+  locKind: "gps" | "approx" | "manual";
+  placeLabel: string;
+  dotName: string;
   offline: boolean;
   center: { lat: number; lon: number };
-  dest: { name: string; lat: number; lon: number } | null;
+  dest: { name: string; lat: number; lon: number; sub?: string } | null;
   plan: RoutePlan | null;
   navigating: boolean;
+  remainSec: number | null;
   weather: WeatherBundle | null;
   weatherBusy: boolean;
+  wxLive: boolean;
+  radarLive: boolean;
+  radarIdx: number;
+  radarPlaying: boolean;
+  hoursNws: NwsHour[];
+  daysNws: NwsDay[];
+  hourlyNow: NwsNow | null;
+  alertGeoms: AlertGeom[];
+  clock: ClockState;
+  cone: ConeState;
+  lastMode: GateMode | null;
+  stormPath: StormPathDetour | null;
+  lastSpoken: string;
+  vehicleId: string | null;
+  intel: IntelItem[];
+  reports: Partial<Record<SourceKey, SrcReport[]>>;
+  srcOk: Partial<Record<SourceKey, boolean>>;
+  srcTab: SourceKey;
+  dismissed: string[];
+  sheet: HudSheet;
+  vehPack: string | null;
   places: Place[];
   routes: SavedRoute[];
   toast: string | null;
@@ -50,6 +87,7 @@ type StormState = {
   upsertRoute: (route: SavedRoute) => void;
   removeRoute: (id: string) => void;
   ping: (msg: string) => void;
+  pruneIntel: () => IntelItem[];
 };
 
 const defaultPrefs: Prefs = {
@@ -57,7 +95,7 @@ const defaultPrefs: Prefs = {
   northUp: false,
   buildings3d: true,
   scaleBar: true,
-  voice: true,
+  voice: false,
   haptics: true,
   incognito: false,
   analytics: false,
@@ -67,47 +105,81 @@ const defaultPrefs: Prefs = {
   alertSevere: true,
   alertRain: true,
   theme: "dark",
-  onboarded: false,
-  tutorialDone: false,
+  onboarded: true,
+  tutorialDone: true,
+  gpsEnabled: true,
+  gpsAsked: false,
+};
+
+const EMPTY_CLOCK: ClockState = { risk: "CLEAR", copy: "Awaiting forecast samples.", slots: [] };
+const EMPTY_CONE: ConeState = {
+  risk: "CLEAR",
+  copy: "Awaiting GPS + route + radar samples.",
+  samples: 0,
+  points: [],
 };
 
 const memory: Record<string, string> = {};
+const memoryStorage = {
+  getItem: (k: string) => memory[k] ?? null,
+  setItem: (k: string, v: string) => {
+    memory[k] = v;
+  },
+  removeItem: (k: string) => {
+    delete memory[k];
+  },
+};
 const storage = createJSONStorage(() =>
-  typeof window === "undefined"
-    ? {
-        getItem: (k: string) => memory[k] ?? null,
-        setItem: (k: string, v: string) => {
-          memory[k] = v;
-        },
-        removeItem: (k: string) => {
-          delete memory[k];
-        },
-      }
-    : localStorage,
+  typeof window === "undefined" ? memoryStorage : localStorage,
 );
 
 export const useStorm = create<StormState>()(
   persist(
     (set, get) => ({
       prefs: defaultPrefs,
-      style: "dark",
+      style: "default",
       overlays: ["radar"],
       hourOffset: 0,
       follow: true,
       gps: null,
       gpsDenied: false,
       gpsLost: false,
+      locKind: "manual",
+      placeLabel: ORIGIN.name,
+      dotName: "IDOT",
       offline: false,
       center: { lat: ORIGIN.lat, lon: ORIGIN.lon },
       dest: null,
       plan: null,
       navigating: false,
+      remainSec: null,
       weather: null,
       weatherBusy: false,
+      wxLive: false,
+      radarLive: false,
+      radarIdx: 0,
+      radarPlaying: true,
+      hoursNws: [],
+      daysNws: [],
+      hourlyNow: null,
+      alertGeoms: [],
+      clock: EMPTY_CLOCK,
+      cone: EMPTY_CONE,
+      lastMode: null,
+      stormPath: null,
+      lastSpoken: "",
+      vehicleId: "nimbus",
+      intel: [],
+      reports: {},
+      srcOk: {},
+      srcTab: "NWS",
+      dismissed: [],
+      sheet: "none",
+      vehPack: null,
       places: [],
       routes: [],
       toast: null,
-      splashDone: false,
+      splashDone: true,
       patch: (p) => set(p),
       setPrefs: (p) => set({ prefs: { ...get().prefs, ...p } }),
       toggleOverlay: (id) => {
@@ -140,12 +212,19 @@ export const useStorm = create<StormState>()(
         set({ toast: msg });
         setTimeout(() => {
           if (get().toast === msg) set({ toast: null });
-        }, 3000);
+        }, 2400);
+      },
+      pruneIntel: () => {
+        const now = Date.now();
+        const next = get().intel.filter((i) => i && now - i.ts < INTEL_TTL_MS);
+        if (next.length !== get().intel.length) set({ intel: next });
+        return next;
       },
     }),
     {
-      name: "storm-path-v1",
+      name: "storm-path-v3",
       storage,
+      skipHydration: true,
       partialize: (s) => ({
         prefs: s.prefs,
         style: s.style,
@@ -153,6 +232,11 @@ export const useStorm = create<StormState>()(
         places: s.places,
         routes: s.routes,
         dest: s.dest,
+        vehicleId: s.vehicleId,
+        intel: s.intel,
+        dismissed: s.dismissed,
+        splashDone: s.splashDone,
+        center: s.center,
       }),
     },
   ),

@@ -2,25 +2,39 @@
 @import "maplibre-gl/dist/maplibre-gl.css";
 
 @theme {
-  --color-bg: #071018;
-  --color-surface: #121c28;
-  --color-raised: #182433;
-  --color-fg: #e8f4f8;
-  --color-muted: #7f97a8;
-  --color-primary: #3dd6ff;
-  --color-primary-fg: #041018;
-  --color-border: #243546;
-  --color-danger: #ff4d4d;
-  --color-warn: #ffb020;
-  --color-ok: #3dd6ff;
-  --color-rain: #4f8cff;
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-bg: #020408;
+  --color-surface: #060d14;
+  --color-raised: #0c1c24;
+  --color-card: #0a1520;
+  --color-fg: #e8fbff;
+  --color-muted: #8aa4b3;
+  --color-dim: #6f8296;
+  --color-primary: #00e5ff;
+  --color-primary-fg: #041016;
+  --color-border: #14303a;
+  --color-danger: #ff3d3d;
+  --color-warn: #ffab00;
+  --color-ok: #00e676;
+  --font-sans: "IBM Plex Sans", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "Courier New", ui-monospace, SFMono-Regular, Menlo, monospace;
   --radius-xs: 4px;
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-xl: 24px;
+  --text-hud: 0.6875rem;
+  --text-hud--line-height: 1.15;
+  --text-micro: 0.5rem;
+  --text-micro--line-height: 1.2;
+  --text-kicker: 0.6875rem;
+  --text-kicker--line-height: 1;
+  --spacing-hud-side: 88px;
+  --spacing-hud-dock: 72px;
+  --spacing-hud-stack: 148px;
+  --spacing-hud-under: 198px;
+  --spacing-dock: 52px;
+  --spacing-speedo: 70px;
+
 }
 
 @layer base {
@@ -34,10 +48,12 @@
     background: var(--color-bg);
     color: var(--color-fg);
     min-height: 100%;
+    height: 100%;
   }
   body {
     font-family: var(--font-sans);
     line-height: 1.5;
+    overflow: hidden;
   }
   h1, h2, h3 {
     text-wrap: balance;
@@ -66,6 +82,28 @@
 
 .tabular { font-variant-numeric: tabular-nums; }
 
+.hud-clip {
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+.hud-clip-wide {
+  clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+}
+.kicker {
+  color: var(--color-primary);
+  letter-spacing: 0.22em;
+  font-size: var(--text-kicker);
+  font-weight: 500;
+  text-transform: uppercase;
+}
+.brand-glow {
+  text-shadow: 0 0 16px color-mix(in oklab, var(--color-primary) 35%, transparent);
+}
+
+.maplibregl-map {
+  background: #dce6ea;
+  width: 100%;
+  height: 100%;
+}
 .maplibregl-ctrl-attrib {
   background: color-mix(in oklab, var(--color-bg) 80%, transparent) !important;
   color: var(--color-muted) !important;
@@ -73,11 +111,8 @@
 }
 .maplibregl-ctrl-attrib a { color: var(--color-primary) !important; }
 .maplibregl-ctrl-bottom-left,
-.maplibregl-ctrl-bottom-right { margin-bottom: 4.5rem; }
-@media (min-width: 768px) {
-  .maplibregl-ctrl-bottom-left,
-  .maplibregl-ctrl-bottom-right { margin-bottom: 0.5rem; }
-}
+.maplibregl-ctrl-bottom-right { margin-bottom: 0.5rem; }
+.maplibregl-ctrl-logo { display: none; }
 
 @keyframes dash-draw {
   to { stroke-dashoffset: 0; }
@@ -86,4 +121,8 @@
   stroke-dasharray: 80;
   stroke-dashoffset: 80;
   animation: dash-draw 1.2s ease forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mark-stroke { stroke-dashoffset: 0; animation: none; }
 }

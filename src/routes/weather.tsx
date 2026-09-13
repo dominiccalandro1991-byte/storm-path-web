@@ -1,120 +1,149 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/shell";
+import { StormClock } from "@/components/storm-clock";
+import { RadarEngine } from "@/components/radar-engine";
+import { ClientOnly } from "@/components/client-only";
 import { useStorm } from "@/lib/store";
-import { cToTemp, fmtClock, hpaToPress, msToSpeed, pressSuffix, speedSuffix, tempSuffix } from "@/lib/engines/units";
-import { wmoLabel } from "@/lib/engines/wmo";
-import { galeScore } from "@/lib/engines/gale";
-import {
-  Area,
-  AreaChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { gateLabel, nextState } from "@/lib/engines/and-gate";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/weather")({ component: Page });
 
 function Page() {
+  const gps = useStorm((s) => s.gps);
+  const wxLive = useStorm((s) => s.wxLive);
+  const radarLive = useStorm((s) => s.radarLive);
+  const lastMode = useStorm((s) => s.lastMode);
+  const hours = useStorm((s) => s.hoursNws);
+  const days = useStorm((s) => s.daysNws);
+  const now = useStorm((s) => s.hourlyNow);
+  const alerts = useStorm((s) => s.weather?.alerts);
   const weather = useStorm((s) => s.weather);
-  const prefs = useStorm((s) => s.prefs);
-  const busy = useStorm((s) => s.weatherBusy);
-
-  if (!weather) {
-    return (
-      <AppShell>
-        <div className="p-6 text-sm text-muted">
-          {busy ? "Hydrating meteorological models…" : "Open Map to lock a location, then return."}
-        </div>
-      </AppShell>
-    );
-  }
-
-  const g = galeScore({
-    precip_mm_h: weather.now.precip_mm,
-    wind_ms: weather.now.wind_ms,
-    vis_m: weather.now.vis_m,
-    radar_dbz: weather.now.precip_mm > 2 ? 40 : 0,
-    severity: weather.alerts[0]?.severity ?? null,
-  });
-
-  const chart = weather.hourly.slice(0, 36).map((h) => ({
-    t: fmtClock(h.t),
-    temp: Number(cToTemp(h.temp_c, prefs.temp).toFixed(1)),
-    precip: h.precip_mm,
-  }));
+  const plan = useStorm((s) => s.plan);
+  const mode = nextState(!!gps, wxLive, radarLive, lastMode);
+  const HOT = /thunder|tornado|severe|hail|snow|ice|blizzard/i;
+  const WET = /rain|shower|storm/i;
 
   return (
     <AppShell>
-      <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-5">
-        <header>
-          <p className="text-[11px] uppercase tracking-[0.22em] text-muted">Atmosphere</p>
-          <h1 className="text-2xl font-medium">Weather</h1>
-        </header>
+      <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-5 pb-8">
+        <p className="kicker">Weather</p>
+        <h1 className="text-3xl font-medium">{wxLive ? "NWS LIVE" : gateLabel(mode)}</h1>
 
-        <section className="rounded-lg bg-surface border border-border p-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Stat label="Now" value={`${cToTemp(weather.now.temp_c, prefs.temp).toFixed(0)}${tempSuffix(prefs.temp)}`} />
-          <Stat label="Sky" value={wmoLabel(weather.now.code).label} />
-          <Stat label="AQI" value={weather.now.aqi == null ? "—" : String(weather.now.aqi)} />
-          <Stat label="Gale" value={`${(g.score * 100).toFixed(0)} ${g.band}`} warn={g.reroute} />
-          <Stat label="Humidity" value={`${weather.now.humidity.toFixed(0)}%`} />
-          <Stat label="Wind" value={`${msToSpeed(weather.now.wind_ms, prefs.speed).toFixed(0)} ${speedSuffix(prefs.speed)}`} />
-          <Stat
-            label="Pressure"
-            value={`${hpaToPress(weather.now.pressure_hpa, prefs.pressure).toFixed(prefs.pressure === "inhg" ? 2 : 0)} ${pressSuffix(prefs.pressure)}`}
-          />
-          <Stat label="UV" value={weather.now.uv.toFixed(1)} />
-        </section>
+        <p className="kicker">Web radar</p>
+        <ClientOnly>
+          <RadarEngine />
+        </ClientOnly>
 
-        {weather.alerts.length > 0 && (
-          <section className="space-y-2">
-            <h2 className="text-sm uppercase tracking-widest text-muted">Alerts</h2>
-            {weather.alerts.map((a) => (
-              <article key={a.id} className="rounded-md bg-danger/10 border border-danger/40 p-3 text-sm">
-                <p className="font-medium">{a.event}</p>
+        <StormClock />
+
+        <p className="kicker">Current conditions</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {[
+            ["TEMP", now?.temperature ?? "--"],
+            ["WIND", now?.wind ?? "--"],
+            ["RH", now?.humidity ?? "--"],
+            ["POP", hours[0]?.pop != null ? `${hours[0].pop}%` : "N/A"],
+          ].map(([k, v]) => (
+            <div key={k} className="rounded-md bg-card border border-border p-3">
+              <p className="text-[10px] uppercase tracking-widest text-muted">{k}</p>
+              <p className="text-lg font-medium">{v}</p>
+            </div>
+          ))}
+        </div>
+
+        <p className="kicker">Hourly · 48 hours</p>
+        <div className="flex gap-2 overflow-x-auto pb-1.5 -mx-1 px-1">
+          {hours.length === 0 && (
+            <p className="text-sm text-muted">Hourly NWS loads with the gridpoint.</p>
+          )}
+          {hours.map((p, i) => {
+            const hot = HOT.test(p.forecast || "");
+            const wet = !hot && ((p.pop != null && p.pop >= 50) || WET.test(p.forecast || ""));
+            return (
+              <div
+                key={`${p.when}-${i}`}
+                className={cn(
+                  "min-w-18 shrink-0 border px-2 py-2.5 text-center",
+                  hot && "border-danger bg-danger/10",
+                  wet && "border-warn bg-warn/10",
+                  !hot && !wet && "border-border",
+                )}
+              >
+                <span className="block text-micro text-muted">{p.when}</span>
+                <b className="block text-base mt-1">{p.temp}</b>
+                <span className="block text-micro text-muted mt-1 leading-snug">{p.forecast}</span>
+                {p.pop != null && p.pop > 0 && (
+                  <span className="block text-micro text-primary mt-1">{p.pop}%</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <p className="kicker">7-day forecast</p>
+        <div className="grid sm:grid-cols-2 gap-2">
+          {days.length === 0 && <p className="text-sm text-muted">7-day NWS loads with the gridpoint.</p>}
+          {days.map((d) => {
+            const t = `${d.short} ${d.detail} ${d.night}`;
+            const hot = /thunder|tornado|severe|flood|snow|ice|blizzard|hurricane|hail|warning/i.test(t);
+            const wet = /rain|shower|storm/i.test(t);
+            return (
+              <article
+                key={d.name}
+                className={cn(
+                  "rounded-md bg-card border p-3",
+                  hot ? "border-danger" : wet ? "border-warn" : "border-border",
+                )}
+              >
+                <p className="text-xs text-muted">{d.name}</p>
+                <p className="text-lg font-medium">
+                  {d.high}
+                  {d.low && d.low !== "—" && <span className="text-muted text-sm"> {d.low}</span>}
+                </p>
+                <p className="text-xs text-muted mt-1">{d.short}</p>
+                {d.wind && <p className="text-[11px] text-muted mt-1">{d.wind}</p>}
+              </article>
+            );
+          })}
+        </div>
+
+        <p className="kicker">NWS alerts</p>
+        {!alerts?.length ? (
+          <p className="text-sm text-muted">
+            {!gps
+              ? "VIEW · MURPHYSBORO — AWAITING GPS FOR LIVE AND-GATE"
+              : "No active NWS alerts at the live fix"}
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {alerts.map((a) => (
+              <article
+                key={a.id}
+                className={cn(
+                  "rounded-md border p-3 text-sm",
+                  a.severity === "Extreme" || a.severity === "Severe"
+                    ? "border-danger bg-danger/10"
+                    : "border-warn bg-warn/10",
+                )}
+              >
+                <p className="font-medium">
+                  {a.event} · {a.severity}
+                </p>
                 <p className="text-xs text-muted mt-1">{a.headline}</p>
+                {a.area && <p className="text-[11px] text-muted mt-1">{a.area}</p>}
               </article>
             ))}
-          </section>
+          </div>
         )}
 
-        <section className="rounded-lg bg-surface border border-border p-4 h-56">
-          <h2 className="text-sm uppercase tracking-widest text-muted mb-2">Hourly</h2>
-          <ResponsiveContainer width="100%" height="85%">
-            <AreaChart data={chart}>
-              <XAxis dataKey="t" tick={{ fill: "#7f97a8", fontSize: 10 }} />
-              <YAxis tick={{ fill: "#7f97a8", fontSize: 10 }} />
-              <Tooltip
-                contentStyle={{ background: "#121c28", border: "1px solid #243546", fontSize: 12 }}
-              />
-              <Area type="monotone" dataKey="temp" stroke="#3dd6ff" fill="#3dd6ff33" />
-              <Area type="monotone" dataKey="precip" stroke="#4f8cff" fill="#4f8cff22" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </section>
-
-        <section className="grid sm:grid-cols-3 gap-2">
-          {weather.daily.map((d) => (
-            <article key={d.t} className="rounded-md bg-surface border border-border p-3 text-sm">
-              <p className="text-[11px] text-muted">{d.t}</p>
-              <p className="font-medium">{wmoLabel(d.code).label}</p>
-              <p className="text-xs text-muted mt-1">
-                {cToTemp(d.tmin_c, prefs.temp).toFixed(0)}–{cToTemp(d.tmax_c, prefs.temp).toFixed(0)}
-                {tempSuffix(prefs.temp)} · {d.precip_prob.toFixed(0)}% precip
-              </p>
-            </article>
-          ))}
-        </section>
+        <p className="kicker">Source status</p>
+        <p className="text-xs text-muted font-mono">
+          NWS · {wxLive ? "LIVE" : hours.length ? "VIEW" : "WAIT"} &nbsp; NOAA ·{" "}
+          {radarLive ? "LIVE" : weather?.radarOk ? "VIEW" : "WAIT"} &nbsp; OSM · CONNECTED &nbsp; OSRM ·{" "}
+          {plan ? "CONNECTED" : "IDLE"}
+        </p>
       </div>
     </AppShell>
-  );
-}
-
-function Stat({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
-  return (
-    <div>
-      <p className="text-[10px] uppercase tracking-widest text-muted">{label}</p>
-      <p className={`text-lg font-medium ${warn ? "text-danger" : ""}`}>{value}</p>
-    </div>
   );
 }
